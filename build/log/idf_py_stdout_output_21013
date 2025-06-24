@@ -1,0 +1,35 @@
+[1/10] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/sensores/ldr/ldr.c.obj
+/home/nahan/Documents/tcc_repository/main/sensores/ldr/ldr.c:5:5: warning: 'ADC_ATTEN_DB_11' is deprecated [-Wdeprecated-declarations]
+    5 |     .atten = LDR_ATTEN,
+      |     ^
+In file included from /home/nahan/esp/esp-idf/components/esp_adc/include/esp_adc/adc_oneshot.h:12,
+                 from /home/nahan/Documents/tcc_repository/main/sensores/ldr/ldr.h:4,
+                 from /home/nahan/Documents/tcc_repository/main/sensores/ldr/ldr.c:1:
+/home/nahan/esp/esp-idf/components/hal/include/hal/adc_types.h:51:5: note: declared here
+   51 |     ADC_ATTEN_DB_11 __attribute__((deprecated)) = ADC_ATTEN_DB_12,  ///<This is deprecated, it behaves the same as `ADC_ATTEN_DB_12`
+      |     ^~~~~~~~~~~~~~~
+[2/10] Performing build step for 'bootloader'
+[1/1] cd /home/nahan/Documents/tcc_repository/build/bootloader/esp-idf/esptool_py && /home/nahan/.espressif/python_env/idf5.4_py3.12_env/bin/python /home/nahan/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 /home/nahan/Documents/tcc_repository/build/bootloader/bootloader.bin
+Bootloader binary size 0x5220 bytes. 0x2de0 bytes (36%) free.
+[3/10] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/main.c.obj
+In file included from /home/nahan/Documents/tcc_repository/main/main.c:6:
+/home/nahan/Documents/tcc_repository/main/sensores/ldr/ldr.h:7:9: warning: "TAG" redefined
+    7 | #define TAG "LDR"
+      |         ^~~
+In file included from /home/nahan/Documents/tcc_repository/main/main.c:5:
+/home/nahan/Documents/tcc_repository/main/sensores/dht22/dht.h:14:9: note: this is the location of the previous definition
+   14 | #define TAG "DHT22"
+      |         ^~~
+[4/10] No install step for 'bootloader'
+[5/10] Linking C static library esp-idf/main/libmain.a
+[6/10] Completed 'bootloader'
+[7/10] Generating ld/sections.ld
+[8/10] Linking CXX executable meu_projeto.elf
+[9/10] Generating binary image from built executable
+esptool.py v4.9.0
+Creating esp32s3 image...
+Merged 2 ELF sections
+Successfully created esp32s3 image.
+Generated /home/nahan/Documents/tcc_repository/build/meu_projeto.bin
+[10/10] cd /home/nahan/Documents/tcc_repository/build/esp-idf/esptool_py && /home/nahan/.espressif/python_env/idf5.4_py3.12_env/bin/python /home/nahan/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app /home/nahan/Documents/tcc_repository/build/partition_table/partition-table.bin /home/nahan/Documents/tcc_repository/build/meu_projeto.bin
+meu_projeto.bin binary size 0x36460 bytes. Smallest app partition is 0x100000 bytes. 0xc9ba0 bytes (79%) free.
