@@ -1,0 +1,12 @@
+idf_component_register(
+  SRCS 
+    "main.c"
+    "sensores/dht22/dht.c"
+    "sensores/ldr/ldr.c"
+    "sensores/moisture/moisture.c"
+  INCLUDE_DIRS 
+    "."
+    "sensores/dht22"
+    "sensores/ldr"
+    "sensores/moisture"
+)
