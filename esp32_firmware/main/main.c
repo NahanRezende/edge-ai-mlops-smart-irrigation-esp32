@@ -6,7 +6,7 @@
 #include "ldr.h"      // sensores/ldr/ldr.h (comentado)
 #include "moisture.h" // sensores/moisture/moisture.h
 
-#define DHT_GPIO GPIO_NUM_5  // Pino onde o DHT22 está conectado
+#define DHT_GPIO GPIO_NUM_17  // Pino onde o DHT22 está conectado
 
 void app_main(void) {
     float temperatura = 0.0;
@@ -14,16 +14,16 @@ void app_main(void) {
 
     // Inicializa os sensores
     // ldr_init();
-    // dht_init(DHT_GPIO, DHT_TYPE_DHT22);
+    dht_init(DHT_GPIO, DHT_TYPE_DHT22);
     // moisture_init();
 
     while (1) {
         // Leitura do DHT22
-        // if (dht_read(DHT_GPIO, &temperatura, &umidade)) {
-        //     printf("✅ Temperatura: %.1f°C | Umidade: %.1f%%\n", temp, hum);
-        // } else {
-        //     printf("❌ Falha na leitura ou checksum inválido\n");
-        // }
+        if (dht_read(DHT_GPIO, &temperatura, &umidade)) {
+            printf("✅ Temperatura: %.1f°C | Umidade: %.1f%%\n", temperatura, umidade);
+        } else {
+            printf("❌ Falha na leitura ou checksum inválido\n");
+        }
 
         // Leitura do LDR
         // int lum = ldr_get_luminosidade();
