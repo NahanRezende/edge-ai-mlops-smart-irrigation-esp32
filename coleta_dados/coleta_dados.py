@@ -1,14 +1,15 @@
 import requests
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
 
-# 📍 Configurações
+# Configurações
 latitude = -19.82   # João Monlevade - MG
 longitude = -43.17
 start_year = 2020
 end_year = 2024
 
-# 📦 Coleta dos dados por ano
+# Coleta dos dados por ano
 df_total = pd.DataFrame()
 
 for year in range(start_year, end_year + 1):
@@ -33,7 +34,7 @@ for year in range(start_year, end_year + 1):
     else:
         print(f"❌ Falha ao coletar dados de {year}")
 
-# 🧹 Limpeza e padronização
+# Limpeza e padronização
 df_total.dropna(inplace=True)
 df_total["time"] = pd.to_datetime(df_total["time"])
 df_total.rename(columns={
@@ -43,11 +44,12 @@ df_total.rename(columns={
     "precipitation_sum": "chuva_mm"
 }, inplace=True)
 
-# 📊 Seleção de colunas relevantes
+# Seleção de colunas relevantes
 colunas = ["data", "temp_max", "temp_min", "chuva_mm"]
 df_final = df_total[colunas]
 
-# 💾 Salvando o CSV tratado
-output_path = "../esp32_firmware/data/dados_climaticos_tratados.csv"
+# Caminho para salvar dentro da mesma pasta do script
+output_path = Path(__file__).resolve().parent / "dados_climaticos_tratados.csv"
+
 df_final.to_csv(output_path, index=False)
 print(f"📁 Dados tratados salvos em: {output_path}")
