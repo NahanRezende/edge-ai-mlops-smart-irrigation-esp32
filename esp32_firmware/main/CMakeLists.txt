@@ -1,12 +1,23 @@
 idf_component_register(
-  SRCS 
-    "main.c"
-    "sensores/dht22/dht.c"
-    "sensores/ldr/ldr.c"
-    "sensores/moisture/moisture.c"
-  INCLUDE_DIRS 
-    "."
-    "sensores/dht22"
-    "sensores/ldr"
-    "sensores/moisture"
+    SRCS
+        "main.c"
+        "forecast/forecast.c"
+        "decider/decider.c"
+        "pump/pump.c"
+        "sensors/dht22/dht.c"
+        "sensors/ldr/ldr.c"
+        "sensors/moisture/moisture.c"
+        "ia/ia.c"
+    INCLUDE_DIRS
+        "."
+        "forecast"
+        "decider"
+        "pump"
+        "ia"
+        "sensors/dht22"
+        "sensors/ldr"
+        "sensors/moisture"
+    REQUIRES
+        driver
+        esp_timer
 )

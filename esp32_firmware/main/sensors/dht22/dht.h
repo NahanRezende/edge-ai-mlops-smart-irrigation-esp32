@@ -2,7 +2,12 @@
 #define DHT_H
 
 #include "driver/gpio.h"
+#include "esp_log.h"
 #include "esp_err.h"
+#include "esp_rom_sys.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 
 typedef enum {
     DHT_TYPE_DHT11 = 0,

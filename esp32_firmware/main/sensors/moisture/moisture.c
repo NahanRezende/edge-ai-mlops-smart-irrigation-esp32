@@ -1,7 +1,5 @@
 #include "moisture.h"
-#include "driver/adc.h"
 
-// Canal ADC utilizado (GPIO4 = ADC1_CHANNEL_3)
 #define MOISTURE_ADC_CHANNEL ADC1_CHANNEL_3
 
 void moisture_init(void) {

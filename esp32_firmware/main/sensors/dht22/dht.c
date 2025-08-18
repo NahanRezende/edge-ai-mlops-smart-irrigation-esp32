@@ -1,13 +1,7 @@
 #include "dht.h"
-#include "driver/gpio.h"
-#include "esp_log.h"
-#include "esp_err.h"
-#include "esp_rom_sys.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 #define TAG "DHT22"
-#define MAX_TIMINGS 90  // Reduzido para evitar ruído extra
+#define MAX_TIMINGS 90
 
 static gpio_num_t dht_gpio;
 static dht_sensor_type_t dht_type;
@@ -16,8 +10,7 @@ void dht_init(gpio_num_t gpio, dht_sensor_type_t sensor_type) {
     dht_gpio = gpio;
     dht_type = sensor_type;
     gpio_reset_pin(dht_gpio);
-    gpio_pullup_en(dht_gpio);  // Ativa pull-up interno
-}
+    gpio_pullup_en(dht_gpio);
 
 bool dht_read(gpio_num_t pin, float *temperature, float *humidity) {
     int data[5] = {0, 0, 0, 0, 0};
@@ -32,14 +25,14 @@ bool dht_read(gpio_num_t pin, float *temperature, float *humidity) {
     gpio_set_level(pin, 1);
     esp_rom_delay_us(80);  // Pulso de start
     gpio_set_direction(pin, GPIO_MODE_INPUT);
-    // esp_rom_delay_us(20);  // Delay adicional para estabilização
+    // esp_rom_delay_us(20);  // Delay adicional para tentar uma estabilização
 
     for (int i = 0; i < MAX_TIMINGS; i++) {
         counter = 0;
         while (gpio_get_level(pin) == laststate) {
             counter++;
             esp_rom_delay_us(1);
-            if (counter >= 255) break;  // Timeout mais seguro
+            if (counter >= 255) break;
         }
         laststate = gpio_get_level(pin);
         if (counter >= 255) break;
