@@ -1,6 +1,6 @@
 # 🌱 Sistema Inteligente de Irrigação com ESP32-S3 e MLOps
 
-Este projeto faz parte do Trabalho de Conclusão de Curso (TCC) de Engenharia da Computação. O objetivo é desenvolver um sistema de irrigação automatizado utilizando a ESP32-S3 para coleta de dados de sensores ambientais, com análise inteligente baseada em técnicas de Machine Learning e práticas de MLOps.
+Projeto de TCC (Sistemas de Informação) para automação de irrigação com ESP32-S3, sensores ambientais e inferência de um modelo de ML treinado externamente. O pipeline em Python gera um header (`ia_params.h`) com os pesos do modelo, normalização e uma pequena série de previsão de chuva; o firmware consome esse header para decidir **ligar/desligar** a bomba com regras de segurança (janela quente, histerese, anti-chattering, etc.).
 
 ---
 
@@ -8,77 +8,128 @@ Este projeto faz parte do Trabalho de Conclusão de Curso (TCC) de Engenharia da
 
 ```bash
 tcc_repository/
-├── esp32_firmware/                # Firmware da ESP32-S3 (ESP-IDF)
-│   ├── main/                      # Código principal do projeto
-│   │   ├── main.c                 # Função app_main e controle dos sensores
-│   │   └── sensores/              # Lógica modular dos sensores conectados
-│   │       ├── dht22/
-│   │       │   ├── dht.c          # Lê temperatura e umidade com o DHT22
-│   │       │   └── dht.h          # Header com definições da API DHT22
-│   │       ├── ldr/
-│   │       │   ├── ldr.c          # Lê luminosidade via LDR
-│   │       │   └── ldr.h          # Header da API do sensor LDR
-│   │       └── moisture/
-│   │           ├── moisture.c     # Lê umidade do solo
-│   │           └── moisture.h     # Header do sensor de umidade do solo
-│   ├── data/                      # (opcional) CSVs a serem gravados via SPIFFS
-│   ├── build/                     # Gerada após compilação (gitignored)
-│   ├── CMakeLists.txt             # Configuração do sistema de build ESP-IDF
-│   ├── sdkconfig                  # Arquivo gerado via `idf.py menuconfig`
-│   └── .gitignore                 # Ignora arquivos como build/
-├── coleta_dados/                 # Scripts Python para coleta de dados históricos
-│   └── coleta_dados.py            # Script que baixa e salva dados climáticos em CSV
-└── README.md                      # Este arquivo
+├── coleta_dados/                      # Treino/ETL (Python) — gera o ia_params.h
+│   ├── coleta_dados.py                # Baixa e salva dados climáticos em CSV
+│   ├── treinar_modelo.py              # Treina, avalia e exporta ia_params.h
+│   ├── dados_climaticos_tratados.csv  # (gerado) CSV consolidado
+│   ├── ia_params.h                    # (gerado) SCALER/W/B + forecast (deploy copia p/ firmware)
+│   ├── model.pkl                      # (gerado) modelo scikit-learn
+│   ├── scaler.pkl                     # (gerado) scaler
+│   ├── metrics.txt                    # (gerado) métricas do treino
+│   └── pesos_bias.json                # (gerado) espelho dos parâmetros
+│
+├── esp32_firmware/                    # Firmware da ESP32-S3 (ESP-IDF)
+│   ├── CMakeLists.txt                 # Projeto ESP-IDF
+│   ├── sdkconfig                      # Gerado via `idf.py menuconfig`
+│   ├── .gitignore                     # Ignora build/ etc.
+│   ├── build/                         # (gerado) artefatos de compilação
+│   └── main/                          # Componente principal
+│       ├── CMakeLists.txt
+│       ├── app_config.h               # Thresholds, janelas, mapeamento de leituras
+│       ├── main.c                     # Loop principal: sensores → decisão → bomba
+│       │
+│       ├── ia/                        # Inferência do modelo
+│       │   ├── ia.c                   # Sigmoid, normalização, dot(W,x)+B
+│       │   ├── ia_infer.h             # API da IA p/ restante do firmware
+│       │   └── ia_params.h            # (injetado pelo deploy a partir de coleta_dados/)
+│       │
+│       ├── forecast/                  # Série embutida de chuva_mm_24h
+│       │   ├── forecast.c             # lookup (t0/step/len) → chuva_24h “agora”
+│       │   ├── forecast.h
+│       │   └── time_utils.h           # Helpers de hora/janela quente
+│       │
+│       ├── decider/                   # Regras + IA + histerese + anti-chattering
+│       │   ├── decider.c
+│       │   └── decider.h
+│       │
+│       ├── pump/                      # Driver do relé/bomba
+│       │   ├── pump.c
+│       │   └── pump.h
+│       │
+│       └── sensors/                   # Drivers dos sensores
+│           ├── dht22/ {dht.c, dht.h}
+│           ├── ldr/   {ldr.c, ldr.h}
+│           └── moisture/ {moisture.c, moisture.h}
+│
+├── .gitignore
+└── README.md
 ```
+
+> **Fluxo:** `treinar_modelo.py` gera `coleta_dados/ia_params.h`. O workflow de CI copia esse header para `esp32_firmware/main/ia/ia_params.h` e dispara `idf.py build` (e opcionalmente OTA). Para testes locais, copie manualmente.
 
 ---
 
 ## 🧰 Comandos Úteis
 
-### 🔧 Compilar o projeto
+### 🔧 Compilar o firmware (ESP-IDF)
+> Execute **dentro de `esp32_firmware/`**:
 ```bash
 idf.py build
 ```
-Compila o código C usando a ESP-IDF. A saída é gerada na pasta `build/`.
-
----
+A saída vai para `esp32_firmware/build/`.
 
 ### 🚀 Gravar firmware e abrir monitor serial
+> Em `esp32_firmware/` (ajuste a porta: `/dev/ttyUSB0`, `/dev/ttyACM0` ou `COMx`):
 ```bash
 idf.py -p /dev/ttyACM0 flash monitor
 ```
-Grava o firmware na ESP32-S3 e abre o terminal serial para depuração.
 
----
-
-### ⚙️ Abrir menu de configuração da ESP-IDF
+### ⚙️ Abrir menu de configuração
 ```bash
 idf.py menuconfig
 ```
-Interface interativa para configurar pinos, sensores e definições do projeto.
 
----
-
-### 💾 Gravar arquivos CSV na memória SPIFFS da ESP32
+### 💾 (Opcional) Gravar arquivos para SPIFFS
 ```bash
 idf.py -p /dev/ttyACM0 spiffs-flash
 ```
-Grava os arquivos da pasta `esp32_firmware/data/` na memória SPIFFS da ESP32.
+Usa os arquivos de `esp32_firmware/data/` (se a partição estiver configurada).
 
 ---
 
-### 📦 Instalar dependências Python
-> Execute dentro da pasta `coleta_dados/`:
+## 🧪 Pipeline de dados e treino (Python)
+
+### 1) Ambiente Python (recomendado usar venv)
+> Na **raiz** (`tcc_repository/`):
 ```bash
-pip install requests pandas
+python -m venv .venv
+# Windows: .\.venv\Scripts\Activate.ps1
+# Linux/macOS: source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install pandas requests numpy tzdata scikit-learn joblib
 ```
-Instala bibliotecas necessárias para rodar o script de coleta de dados.
 
----
-
-### 📊 Executar script Python para coletar dados históricos
+### 2) Coletar dados históricos
 ```bash
-cd coleta_dados/
+cd coleta_dados
 python coleta_dados.py
 ```
-Executa a coleta e salva os dados climáticos (ex: temperatura) em CSV.
+Gera `coleta_dados/dados_climaticos_tratados.csv`.
+
+### 3) Treinar modelo e exportar header
+```bash
+python treinar_modelo.py
+```
+Gera `coleta_dados/ia_params.h` (SCALER/W/B + forecast de chuva_24h).
+
+**Teste local (sem CI):**
+```bash
+cp ia_params.h ../esp32_firmware/main/ia/ia_params.h
+cd ../esp32_firmware && idf.py build
+```
+
+---
+
+## 🧠 Como a decisão é tomada
+
+1. A ESP32 lê **umidade do solo**, **temperatura**, **umidade do ar** (+ opcional **chuva_24h** do forecast embutido).
+2. Normaliza com `SCALER_MEAN/SCALER_SCALE` e aplica o modelo (regressão logística).
+3. Regras operacionais (janela quente, previsão de chuva forte, histerese e anti-chattering) garantem segurança e estabilidade do liga/desliga.
+
+---
+
+## 📌 Observações
+
+- O arquivo `esp32_firmware/main/ia/ia_params.h` é **gerado**; não edite manualmente.
+- Thresholds e janelas estão em `app_config.h`.
+- A previsão de chuva embutida tem grade simples (`t0`, `step_min`, `len`); dá pra evoluir sem mudar o firmware.
