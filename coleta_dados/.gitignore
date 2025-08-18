@@ -1,0 +1,7 @@
+.venv/
+esp32_firmware/build/
+esp32_firmware/.cache/
+esp32_firmware/sdkconfig.old
+__pycache__/
+*.pyc
+.ipynb_checkpoints/

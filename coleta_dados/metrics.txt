@@ -1,0 +1,16 @@
+Modelo: regressao_logistica
+Acurácia: 0.9951
+F1: 0.9970
+Matriz de confusão:
+[[ 77   2]
+ [  0 332]]
+
+              precision    recall  f1-score   support
+
+           0     1.0000    0.9747    0.9872        79
+           1     0.9940    1.0000    0.9970       332
+
+    accuracy                         0.9951       411
+   macro avg     0.9970    0.9873    0.9921       411
+weighted avg     0.9952    0.9951    0.9951       411
+
