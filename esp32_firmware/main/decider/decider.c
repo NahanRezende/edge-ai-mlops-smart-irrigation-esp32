@@ -1,4 +1,7 @@
 #include "decider.h"
+#include "moisture.h"
+#include "dht.h"
+#include "ldr.h"
 
 // Usamos apenas os macros de leitura definidos em app_config.h:
 //   READ_SOIL_PCT(), READ_TEMP_C(), READ_RH_PCT(), (opcional) READ_LDR_MV()

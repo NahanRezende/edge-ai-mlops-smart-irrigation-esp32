@@ -2,7 +2,8 @@
 
 #include <stdbool.h>
 #include "app_config.h"
-#include "gpio.h"
+#include "driver/gpio.h"
+#include "esp_log.h"
 
 
 void pump_init(void);

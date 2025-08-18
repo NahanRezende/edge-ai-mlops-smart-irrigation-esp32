@@ -7,6 +7,7 @@
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "app_config.h"
 
 
 typedef enum {
@@ -18,5 +19,8 @@ typedef enum {
 
 void dht_init(gpio_num_t gpio, dht_sensor_type_t sensor_type);
 bool dht_read(gpio_num_t pin, float *temperature, float *humidity);
+
+float dht22_read_temp_c(void);
+float dht22_read_rh_pct(void);
 
 #endif // DHT_H

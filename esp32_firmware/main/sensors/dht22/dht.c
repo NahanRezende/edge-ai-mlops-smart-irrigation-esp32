@@ -11,6 +11,7 @@ void dht_init(gpio_num_t gpio, dht_sensor_type_t sensor_type) {
     dht_type = sensor_type;
     gpio_reset_pin(dht_gpio);
     gpio_pullup_en(dht_gpio);
+}
 
 bool dht_read(gpio_num_t pin, float *temperature, float *humidity) {
     int data[5] = {0, 0, 0, 0, 0};
@@ -65,4 +66,20 @@ bool dht_read(gpio_num_t pin, float *temperature, float *humidity) {
     if (data[2] & 0x80) *temperature *= -1;
 
     return true;
+}
+
+float dht22_read_temp_c(void) {
+    float t = -127.0f, h = -1.0f;
+    if (!dht_read(dht_gpio, &t, &h)) {
+        ESP_LOGW(TAG, "dht_read() falhou (temp)");
+    }
+    return t;  // retorne como quiser: -127 ou NAN se preferir
+}
+
+float dht22_read_rh_pct(void) {
+    float t = -127.0f, h = -1.0f;
+    if (!dht_read(dht_gpio, &t, &h)) {
+        ESP_LOGW(TAG, "dht_read() falhou (umidade)");
+    }
+    return h;  // 0..100
 }

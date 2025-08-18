@@ -2,18 +2,17 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "app_config.h" //configs gerais
-#include "time_utils.h" //util para horario de irrigação (sim ou não)
-#include "forecast.h" //acesso rapido para ler o ia_params.h
-#include "ia/ia_infer.h"
-#include "drivers/pump.h"
-#include "control/decider.h"
+#include "app_config.h"   // onde eu mudo pinos e thresholds
+#include "time_utils.h"   // helpers de hora local, janela quente e anti-chattering
+#include "forecast.h"     // lê dados/curvas do ia_params.h e chuva prevista
+#include "ia_infer.h"     // roda o modelo e devolve probabilidade/score
+#include "pump.h"         // abstração do relé (pump_init, pump_set)
+#include "decider.h"      // regra final de irrigação (on/off)
 
 #include "dht.h"      // sensores/dht22/dht.h
 #include "ldr.h"      // sensores/ldr/ldr.h (comentado)
 #include "moisture.h" // sensores/moisture/moisture.h
 
-#define DHT_GPIO GPIO_NUM_17  // Pino onde o DHT22 está conectado
 
 void app_main(void) {
     // Sensores

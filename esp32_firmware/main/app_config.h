@@ -1,5 +1,14 @@
 #pragma once
 
+// Defines para os GPIO
+#define DHT_GPIO    17   // DHT22 
+#define LDR_GPIO     6   // LDR
+#define SOIL_GPIO    7   // Umidade do solo 
+#define PUMP_GPIO   12   // Bomba/relé
+
+// Trava de segurança para a bomba (1 = só simula; 0 = controla o GPIO de verdade)
+#define PUMP_DRY_RUN  1
+
 // Janela quente (hora local)
 #define HORA_QUENTE_INICIO   10   // 10:00
 #define HORA_QUENTE_FIM      17   // 17:00
@@ -41,7 +50,7 @@
 
 // --- Mapeamento das leituras (ajuste nomes se necessário) ---
 #ifndef READ_SOIL_PCT
-    #define READ_SOIL_PCT()        moisture_read_percent()  // 0–100
+    #define READ_SOIL_PCT()        moisture_get_umidade()  // 0–100
 #endif
 
 #ifndef READ_TEMP_C
