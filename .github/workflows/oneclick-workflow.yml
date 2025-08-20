@@ -1,7 +1,6 @@
 name: CI/CD Irrigação Inteligente  # nome do workflow
 
 on:
-  # botão "Run workflow" com parâmetros
   workflow_dispatch:
     inputs:
       run_train:
@@ -21,91 +20,93 @@ on:
         default: "no"
 
 jobs:
-
   # =========================
   # 1) Treino de ML (self-hosted)
   # =========================
   train-ml:
-    if: ${{ github.event.inputs.run_train == 'yes' }}   # roda só se for "yes"
-    runs-on: [self-hosted, Linux, X64]                  # seu runner local
+    if: ${{ github.event.inputs.run_train == 'yes' }}
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4                       # baixa o código
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v5                   # provisiona Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps                                 # instala dependências do treino
+      - name: Install deps
         run: pip install -r treinamento_externo/requirements.txt
 
-      - name: Run training                                 # executa pipeline de treino
+      - name: Run training
         run: python treinamento_externo/treinar_modelo.py
 
       - name: Upload ML artifacts
-        uses: actions/upload-artifact@v4                    # publica artefatos p/ outros jobs
+        uses: actions/upload-artifact@v4
         with:
-          name: ml-artifacts                               # nome do pacote de artefatos
-          path: |                                          # arquivos a salvar
+          name: ml-artifacts
+          path: |
             treinamento_externo/ia_params.h
             treinamento_externo/*.pkl
             treinamento_externo/*.csv
 
   # ===================================
-  # 2) Build do firmware ESP32 (GitHub-hosted)
-  #    -> usa action oficial da Espressif CORRETA
+  # 2) Build do firmware ESP32 (SELF-HOSTED)
+  #    - Espera o train-ml quando ele roda
+  #    - Faz build usando seu ESP-IDF local
   # ===================================
   build-firmware:
-    if: ${{ github.event.inputs.run_build == 'yes' }}   # roda só se for "yes"
-    runs-on: ubuntu-latest                              # runner do GitHub
+    runs-on: [self-hosted, Linux, X64]
+    needs: [train-ml]
+    # Se run_build = yes E (train-ml teve sucesso OU foi pulado porque run_train = no)
+    if: ${{ github.event.inputs.run_build == 'yes' && (needs.train-ml.result == 'success' || needs.train-ml.result == 'skipped') }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # baixa artefatos de ML apenas se o treino rodou neste workflow
-      - name: Download ML artifacts (if trained)
-        if: ${{ github.event.inputs.run_train == 'yes' }}
+      # Só baixa artefato se o train-ml realmente rodou e subiu
+      - name: Download ML artifacts (only if trained)
+        if: ${{ needs.train-ml.result == 'success' }}
         uses: actions/download-artifact@v4
         with:
           name: ml-artifacts
-          path: esp32_firmware/components/ml            # onde o firmware espera encontrar
+          path: ml-artifacts
 
-      # Action CORRETA da Espressif para preparar o ESP-IDF
-      - name: Setup ESP-IDF
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: v5.4                         # alinha com seu projeto (5.4.x)
-
-      - name: Build firmware
+      - name: Place generated header (if present)
         run: |
-          # gera uma versão amigável (branch-sha-data-runN)
+          mkdir -p esp32_firmware/main/ia
+          if [ -f ml-artifacts/ia_params.h ]; then
+            cp ml-artifacts/ia_params.h esp32_firmware/main/ia/ia_params.h
+          fi
+          ls -l esp32_firmware/main/ia || true
+
+      - name: Build firmware (self-hosted)
+        working-directory: esp32_firmware
+        run: |
+          set -euo pipefail
+          # Carrega seu ambiente do ESP-IDF neste step
+          source "$HOME/esp/esp-idf/export.sh"
+          idf.py --version
+          idf.py set-target esp32s3
+
           GIT_BRANCH="${GITHUB_REF_NAME}"
           GIT_SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
           BUILD_DATE="$(date -u +%Y%m%d)"
           FW_VERSION="${GIT_BRANCH}-${GIT_SHA_SHORT}-${BUILD_DATE}-run${GITHUB_RUN_NUMBER}"
           echo "Firmware version: ${FW_VERSION}"
 
-          cd esp32_firmware
-          idf.py -DPROJECT_VER="${FW_VERSION}" build     # compila
+          idf.py -DPROJECT_VER="${FW_VERSION}" build
+          ls -l build/*.bin
 
-          # Garante o nome final do bin (caso seu CMake já não renomeie)
-          if [ -f build/ia_automated_irrigation_system.bin ]; then
-            echo "Arquivo final já está com o nome esperado."
-          else
-            # tenta descobrir o .bin principal (app) e renomeia
-            APP_BIN="$(ls -1 build/*.bin | grep -E '/(project|app|.*)\.bin$' || true)"
-            if [ -z "$APP_BIN" ]; then
-              # fallback: pega o maior .bin (normalmente o app)
-              APP_BIN="$(ls -S build/*.bin | head -n1)"
-            fi
-            echo "Renomeando $APP_BIN -> build/ia_automated_irrigation_system.bin"
+          # Garante o nome final
+          if [ ! -f build/ia_automated_irrigation_system.bin ]; then
+            APP_BIN="$(ls -S build/*.bin | head -n1)"
             cp "$APP_BIN" build/ia_automated_irrigation_system.bin
           fi
 
       - name: Upload firmware
-        uses: actions/upload-artifact@v4                 # publica o .bin para o job de OTA
+        uses: actions/upload-artifact@v4
         with:
           name: firmware-bin
           path: esp32_firmware/build/ia_automated_irrigation_system.bin
@@ -114,26 +115,25 @@ jobs:
   # 3) OTA para o ESP32 (self-hosted)
   # =========================
   ota-deploy:
-    if: ${{ github.event.inputs.deploy_ota == 'yes' }}  # roda só se for "yes"
-    runs-on: [self-hosted, Linux, X64]                  # precisa estar na mesma rede do ESP32
-    needs: [build-firmware]                             # garante que o binário existe
+    if: ${{ github.event.inputs.deploy_ota == 'yes' }}
+    runs-on: [self-hosted, Linux, X64]
+    needs: [build-firmware]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Download firmware
-        uses: actions/download-artifact@v4              # traz o .bin gerado no build
+        uses: actions/download-artifact@v4
         with:
           name: firmware-bin
           path: .
 
       - name: Deploy OTA to ESP32
         env:
-          OTA_TOKEN: ${{ secrets.OTA_TOKEN }}          # token Bearer salvo nos Secrets
-          ESP32_IP:  ${{ secrets.ESP32_IP }}           # IP do seu device
-          OTA_PORT:  ${{ secrets.OTA_PORT }}           # porta (ex.: 8070)
+          OTA_TOKEN: ${{ secrets.OTA_TOKEN }}
+          ESP32_IP:  ${{ secrets.ESP32_IP }}
+          OTA_PORT:  ${{ secrets.OTA_PORT }}
         run: |
-          # envia binário via HTTP/1.1 para o endpoint /ota do seu firmware
           curl -v --http1.1 \
             -H "Connection: close" \
             -H "Content-Type: application/octet-stream" \
