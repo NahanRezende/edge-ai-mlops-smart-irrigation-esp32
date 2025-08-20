@@ -1,0 +1,102 @@
+@startuml
+title Diagrama de Classes — Esp32 Firmware
+skinparam classAttributeIconSize 0
+hide empty members
+
+package esp32_firmware {
+
+  class Main {
+    +app_main()
+  }
+
+  class AppConfig <<config>> {
+  }
+
+  class Wifi <<service>> {
+    +wifi_init_sta()
+    +wifi_wait_connected()
+  }
+
+  class OtaServer <<service>> {
+    +ota_server_start()
+  }
+
+  class ia <<service>> {
+    +ia_predict_proba()
+    +ia_should_irrigate()
+    +ia_should_irrigate_hysteresis()
+  }
+
+  class "ia_params.h" as IA_PARAMS_H <<artifact>>
+
+  package forecast {
+    class Forecast <<service>> {
+      +forecast_chuva24h_now()
+    }
+    class TimeUtils <<util>> {
+      +is_hot_window()
+    }
+  }
+
+  class Decider <<control>> {
+    +decider_init()
+    +decider_tick()
+  }
+
+  class Pump <<driver>> {
+    +pump_init()
+    +pump_set()
+  }
+
+  package sensors {
+    class DHT22 <<driver>> {
+      +dht_init()
+      +dht22_read_temp_c()
+      +dht22_read_rh_pct()
+    }
+    class LDR <<driver>> {
+      +ldr_init()
+      +ldr_get_luminosidade()
+    }
+    class Moisture <<driver>> {
+      +moisture_init()
+      +moisture_get_umidade()
+    }
+    class ADC_Shared <<driver>> {
+      +adc1_get_handle()
+      +adc1_config_channel_once()
+      +adc1_read_raw()
+    }
+  }
+
+  Main ..> Wifi
+  Main ..> OtaServer
+  Main ..> Decider
+  Main ..> Forecast
+  Main ..> ia
+  Main ..> Pump
+  Main ..> DHT22
+  Main ..> LDR
+  Main ..> Moisture
+  Main ..> AppConfig
+
+  Decider ..> ia
+  Decider ..> Forecast
+  Decider ..> Pump
+
+  Forecast ..> TimeUtils
+
+  DHT22 ..> AppConfig
+  LDR ..> AppConfig
+  Moisture ..> AppConfig
+  Pump ..> AppConfig
+  Wifi ..> AppConfig
+  OtaServer ..> AppConfig
+
+  LDR ..> ADC_Shared
+  Moisture ..> ADC_Shared
+
+  ia ..> IA_PARAMS_H : le_parametros
+  Forecast ..> IA_PARAMS_H
+}
+@enduml

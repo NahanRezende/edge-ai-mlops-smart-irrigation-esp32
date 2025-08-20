@@ -1,0 +1,54 @@
+@startuml
+title Sequência — Treino e exportação
+
+participant TreinarModelo
+participant ColetaDados
+participant DataPreprocessor as Pre
+participant FeatureEngineer as FE
+participant Scaler
+participant ModelTrainer as Trainer
+participant Evaluator
+participant IaParamsExporter as Exporter
+participant "dados_climaticos_tratados.csv" as ART_CSV <<artifact>>
+participant "model.pkl" as ART_MODEL <<artifact>>
+participant "scaler.pkl" as ART_SCALER <<artifact>>
+participant "metrics.txt" as ART_METRICS <<artifact>>
+participant "ia_params.h" as ART_PARAMS <<artifact>>
+participant "pesos_bias.json" as ART_JSON <<artifact>>
+
+TreinarModelo -> ColetaDados : baixar_dados()
+ColetaDados --> TreinarModelo : df_bruto
+TreinarModelo -> ColetaDados : tratar()
+ColetaDados --> TreinarModelo : df_tratado
+TreinarModelo -> ColetaDados : salvar_csv(df_tratado)
+ColetaDados --> ART_CSV : cria
+
+TreinarModelo -> Pre : train_test_split()/split_xy()
+Pre --> TreinarModelo : Xtr, Xte, ytr, yte
+
+TreinarModelo -> FE : fit_transform(Xtr)
+FE --> TreinarModelo : Xtr_fe
+TreinarModelo -> FE : transform(Xte)
+FE --> TreinarModelo : Xte_fe
+
+TreinarModelo -> Scaler : fit_transform(Xtr_fe)
+Scaler --> TreinarModelo : Xtr_sc
+TreinarModelo -> Scaler : transform(Xte_fe)
+Scaler --> TreinarModelo : Xte_sc
+Scaler --> ART_SCALER : salvar()
+
+TreinarModelo -> Trainer : build_model()
+Trainer --> TreinarModelo : model
+TreinarModelo -> Trainer : fit(model, Xtr_sc, ytr)
+Trainer --> ART_MODEL : salvar()
+Trainer --> TreinarModelo : model_treinado
+
+TreinarModelo -> Evaluator : avaliar(model_treinado, Xte_sc, yte)
+Evaluator --> TreinarModelo : metrics
+Evaluator --> ART_METRICS : salvar()
+
+TreinarModelo -> Exporter : export_to_header(model_treinado, Scaler, ... )
+Exporter --> ART_PARAMS : gera
+TreinarModelo -> Exporter : to_json(model_treinado, Scaler, ... )
+Exporter --> ART_JSON : gera
+@enduml

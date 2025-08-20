@@ -1,0 +1,51 @@
+@startuml
+title Diagrama de Pacotes — Irrigação Inteligente
+skinparam packageStyle rectangle
+skinparam defaultTextAlignment left
+
+package coleta_dados {
+  package scripts
+}
+
+package ia_params_h
+
+package esp32_firmware {
+  package main
+  package wifi
+  package ota
+  package ia
+  package forecast
+  package decider
+  package pump
+  package sensors {
+    package dht22
+    package ldr
+    package moisture
+    package adc_shared
+  }
+  package app_config_h
+}
+
+' -------- Integração treino -> firmware --------
+coleta_dados ..> ia_params_h : gera/atualiza
+ia ..> ia_params_h : lê parâmetros
+
+' -------- Dependências macro do firmware --------
+main ..> wifi
+main ..> ota
+main ..> decider
+main ..> ia
+main ..> forecast
+main ..> pump
+main ..> sensors
+
+decider ..> ia
+decider ..> forecast
+decider ..> pump
+
+sensors ..> adc_shared
+sensors ..> app_config_h
+pump ..> app_config_h
+wifi ..> app_config_h
+ota ..> app_config_h
+@enduml

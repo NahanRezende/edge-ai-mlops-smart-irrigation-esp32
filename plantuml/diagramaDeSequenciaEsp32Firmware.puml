@@ -1,0 +1,48 @@
+@startuml
+title Sequência — Ciclo de irrigação (esp32_firmware)
+
+participant Main
+participant Decider
+participant ia
+participant Forecast
+participant TimeUtils
+participant Pump
+participant DHT22
+participant LDR
+participant Moisture
+participant ADC_Shared
+
+loop a cada DECIDER_TICK_MS
+  Main -> Decider : decider_tick(&on)
+
+  Decider -> TimeUtils : is_hot_window()
+  TimeUtils --> Decider : bool
+
+  Decider -> DHT22 : dht22_read_temp_c()\ndht22_read_rh_pct()
+  DHT22 --> Decider : temp_c, rh_pct
+
+  Decider -> Moisture : moisture_get_umidade()
+  Moisture --> Decider : soil_pct
+
+  opt APP_USE_LDR_GATE
+    Decider -> LDR : ldr_init()/ldr_get_luminosidade()
+    LDR -> ADC_Shared : adc1_read_raw()
+    ADC_Shared --> LDR : raw
+    LDR --> Decider : ldr_mv
+  end
+
+  Decider -> Forecast : forecast_chuva24h_now()
+  Forecast --> Decider : chuva_mm_24h
+
+  Decider -> ia : ia_should_irrigate_hysteresis(in, IA_LOW_TH, IA_HIGH_TH, prev)
+  ia --> Decider : irrigar?(bool)
+
+  Decider --> Main : on (bool)
+
+  alt on == true
+    Main -> Pump : pump_set(true)
+  else
+    Main -> Pump : pump_set(false)
+  end
+end
+@enduml

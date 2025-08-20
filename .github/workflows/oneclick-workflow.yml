@@ -37,20 +37,20 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
-        run: pip install -r coleta_dados/requirements.txt   # dependências do treino
+      - name: Install deps                                 # instala dependências do treino
+        run: pip install -r treinamento_externo/requirements.txt
 
-      - name: Run training
-        run: python coleta_dados/treinar_modelo.py          # gera artefatos (ia_params.h, pkl, csv)
+      - name: Run training                                 # executa pipeline de treino
+        run: python treinamento_externo/treinar_modelo.py
 
       - name: Upload ML artifacts
         uses: actions/upload-artifact@v4                    # publica artefatos p/ outros jobs
         with:
-          name: ml-artifacts
-          path: |
-            coleta_dados/ia_params.h
-            coleta_dados/*.pkl
-            coleta_dados/*.csv
+          name: ml-artifacts                               # nome do pacote de artefatos
+          path: |                                          # arquivos a salvar
+            treinamento_externo/ia_params.h
+            treinamento_externo/*.pkl
+            treinamento_externo/*.csv
 
   # ===================================
   # 2) Build do firmware ESP32 (GitHub-hosted)

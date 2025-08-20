@@ -1,0 +1,93 @@
+@startuml
+title Diagrama de Classes — coleta_dados (sem duplicação)
+skinparam classAttributeIconSize 0
+hide empty members
+
+package treinamento_externo {
+  class ColetaDados {
+    +baixar_dados()
+    +tratar()
+    +salvar_csv()
+  }
+
+  class DataPreprocessor {
+    +limpar()
+    +split_xy()
+    +train_test_split()
+  }
+
+  class FeatureEngineer {
+    +fit_transform()
+    +transform()
+  }
+
+  class Scaler {
+    +fit_transform()
+    +transform()
+  }
+
+  interface Model {
+    +predict()
+  }
+
+  class ModelTrainer {
+    +build_model()
+    +fit()
+    +salvar()
+  }
+
+  class Evaluator {
+    +avaliar()
+    +salvar()
+  }
+
+  class Metrics {
+    +acc
+    +precision
+    +recall
+    +f1
+  }
+
+  class IaParamsExporter {
+    +to_header()
+    +to_json()
+  }
+
+  class TreinarModelo {
+    +rodar()
+  }
+
+  ' Orquestração por composição
+  TreinarModelo *-- DataPreprocessor
+  TreinarModelo *-- FeatureEngineer
+  TreinarModelo *-- Scaler
+  TreinarModelo *-- ModelTrainer
+  TreinarModelo *-- Evaluator
+  TreinarModelo *-- IaParamsExporter
+
+  ' Dependências de uso
+  TreinarModelo ..> ColetaDados
+  Evaluator ..> Metrics
+  ModelTrainer ..> Model
+}
+
+' ====== Artefatos (defina UMA vez com alias e use os aliases) ======
+package artefatos {
+  class "dados_climaticos_tratados.csv" as ART_CSV <<artifact>>
+  class "model.pkl"                  as ART_MODEL <<artifact>>
+  class "scaler.pkl"                 as ART_SCALER <<artifact>>
+  class "metrics.txt"                as ART_METRICS <<artifact>>
+  class "pesos_bias.json"            as ART_JSON <<artifact>>
+  class "ia_params.h"                as ART_IA_H <<artifact>>
+}
+
+' ====== Produção/consumo usando SÓ os aliases ======
+ColetaDados ..> ART_CSV : gera
+TreinarModelo ..> ART_CSV : lê
+
+ModelTrainer ..> ART_MODEL  : salva
+Scaler       ..> ART_SCALER : salva
+Evaluator    ..> ART_METRICS: salva
+IaParamsExporter ..> ART_IA_H : exporta
+IaParamsExporter ..> ART_JSON : exporta
+@enduml
