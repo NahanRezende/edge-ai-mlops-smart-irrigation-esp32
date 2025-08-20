@@ -26,6 +26,9 @@ tcc_repository/
 │   └── main/                          # Componente principal
 │       ├── CMakeLists.txt
 │       ├── app_config.h               # Thresholds, janelas, mapeamento de leituras
+|       ├── wifi/                      # Modulo para conexão wifi da placa
+|       │   ├── wifi.c
+|       │   └── wifi.h
 │       ├── main.c                     # Loop principal: sensores → decisão → bomba
 │       │
 │       ├── ia/                        # Inferência do modelo
