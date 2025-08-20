@@ -8,6 +8,8 @@
 #include "ia_infer.h"     // roda o modelo e devolve probabilidade/score
 #include "pump.h"         // abstração do relé (pump_init, pump_set)
 #include "decider.h"      // regra final de irrigação (on/off)
+#include "wifi.h"         // chamando o wifi para conectar
+#include "ota_server.h"
 
 #include "dht.h"      // sensores/dht22/dht.h
 #include "ldr.h"      // sensores/ldr/ldr.h (comentado)
@@ -15,6 +17,20 @@
 
 
 void app_main(void) {
+    // Wifi
+    ESP_LOGI("app","init Wi-Fi");
+    wifi_init_sta();
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    if(wifi_wait_connected(15000)){
+        ESP_LOGI("app","Wi-Fi OK (IP obtido)");
+    } else {
+        ESP_LOGW("app","sem IP após 15s; seguindo mesmo assim");
+    }
+
+    // Start OTA server
+    ESP_LOGI("app","iniciando OTA server");
+    ota_server_start();
+
     // Sensores
     dht_init(DHT_GPIO, DHT_TYPE_DHT22);
     moisture_init();

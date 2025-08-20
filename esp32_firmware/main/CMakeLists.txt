@@ -1,6 +1,8 @@
 idf_component_register(
   SRCS
     "main.c"
+    "wifi/wifi.c"
+    "ota/ota_server.c"
     "pump/pump.c"
     "sensors/adc_shared/adc_shared.c"
     "sensors/ldr/ldr.c"
@@ -11,6 +13,8 @@ idf_component_register(
     "ia/ia.c"
   INCLUDE_DIRS
     "."
+    "wifi"
+    "ota"
     "pump"
     "sensors/adc_shared"
     "sensors/ldr"
@@ -23,4 +27,10 @@ idf_component_register(
     driver
     esp_timer
     esp_adc
+    esp_wifi
+    esp_netif
+    nvs_flash
+    esp_event
+    esp_http_server
+    app_update
 )
