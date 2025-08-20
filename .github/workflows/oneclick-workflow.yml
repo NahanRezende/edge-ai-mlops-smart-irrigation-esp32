@@ -1,19 +1,19 @@
-name: CI/CD Irrigação Inteligente
+name: CI/CD Irrigação Inteligente  # nome do workflow exibido no GitHub
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:                # permite rodar manualmente pelo botão "Run workflow"
     inputs:
-      run_train:
+      run_train:                    # input: executar treino de ML?
         description: "Rodar treino de ML?"
         type: choice
         options: [ "yes", "no" ]
         default: "yes"
-      run_build:
+      run_build:                    # input: compilar firmware?
         description: "Rodar build do firmware?"
         type: choice
         options: [ "yes", "no" ]
         default: "yes"
-      deploy_ota:
+      deploy_ota:                   # input: fazer OTA no dispositivo?
         description: "Fazer OTA no ESP32?"
         type: choice
         options: [ "yes", "no" ]
@@ -21,27 +21,28 @@ on:
 
 jobs:
 
+  # -------------------------
+  # 1) Treino de ML (portável)
+  # -------------------------
   train-ml:
-    if: ${{ github.event.inputs.run_train == 'yes' }}
-    runs-on: [self-hosted, Linux, X64]
+    if: ${{ github.event.inputs.run_train == 'yes' }}   # só roda se o input for "yes"
+    runs-on: ubuntu-latest                              # usa runner hospedado do GitHub
     steps:
-      - name: Checkout
+      - name: Checkout                                  # baixa o repositório
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python                              # provisiona Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps
-        run: pip install -r requirements.txt
-        working-directory: coleta_dados
+      - name: Install deps                              # instala libs do treino
+        run: pip install -r coleta_dados/requirements.txt
 
-      - name: Run training
-        run: python treinar_modelo.py
-        working-directory: coleta_dados
+      - name: Run training                              # executa pipeline de treino
+        run: python coleta_dados/treinar_modelo.py
 
-      - name: Upload ML artifacts
+      - name: Upload ML artifacts                       # publica artefatos gerados pelo treino
         uses: actions/upload-artifact@v4
         with:
           name: ml-artifacts
@@ -50,22 +51,31 @@ jobs:
             coleta_dados/*.pkl
             coleta_dados/*.csv
 
+  # --------------------------------------------
+  # 2) Build do firmware com setup-esp-idf (CI)
+  # --------------------------------------------
   build-firmware:
-    needs: [train-ml]
-    if: ${{ github.event.inputs.run_build == 'yes' && (github.event.inputs.run_train == 'no' || needs.train-ml.result == 'success') }}
-    runs-on: [self-hosted, Linux, X64]
+    if: ${{ github.event.inputs.run_build == 'yes' }}   # só roda se o input for "yes"
+    runs-on: ubuntu-latest                              # runner hospedado (limpo e reprodutível)
+    needs: [train-ml]                                   # espera o treino (para baixar artefatos)
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download ML artifacts
+      - name: Download ML artifacts (se houver)         # traz ia_params.h / pesos etc. para o projeto
         if: ${{ github.event.inputs.run_train == 'yes' }}
         uses: actions/download-artifact@v4
         with:
           name: ml-artifacts
           path: esp32_firmware/components/ml
 
-      - name: Build firmware
+      - name: Setup ESP-IDF (Espressif action)          # instala e configura o ESP-IDF automaticamente
+        uses: espressif/setup-esp-idf@v1
+        with:
+          version: v5.4.1                                # versão do ESP-IDF a usar (ajuste se quiser)
+          # target é detectado pelo projeto; se quiser forçar: target: esp32s3
+
+      - name: Build firmware (com versionamento)        # compila e embute versão via PROJECT_VER
         run: |
           GIT_BRANCH="${GITHUB_REF_NAME}"
           GIT_SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
@@ -75,31 +85,46 @@ jobs:
           cd esp32_firmware
           idf.py -DPROJECT_VER="${FW_VERSION}" build
 
-      - name: Upload firmware
+      - name: Rename final .bin                         # padroniza o nome do binário para OTA
+        run: |
+          cd esp32_firmware/build
+          # descobre o app bin gerado (1º .bin que não é bootloader/partition/ota_data)
+          APP_BIN="$(ls -1 *.bin | grep -v -E 'bootloader|partition|ota_?data' | head -n1)"
+          cp "$APP_BIN" ia_automated_irrigation_system.bin
+          ls -lh ia_automated_irrigation_system.bin
+
+      - name: Upload firmware                           # publica o .bin renomeado como artefato
         uses: actions/upload-artifact@v4
         with:
           name: firmware-bin
           path: esp32_firmware/build/ia_automated_irrigation_system.bin
 
+  # -------------------------------------------------------
+  # 3) OTA
+  # -------------------------------------------------------
   ota-deploy:
-    if: ${{ github.event.inputs.deploy_ota == 'yes' }}
-    runs-on: [self-hosted, Linux, X64]
-    needs: [build-firmware]
+    if: ${{ github.event.inputs.deploy_ota == 'yes' }}  # só roda se o input for "yes"
+    runs-on: [self-hosted, Linux, X64]                  # usa seu runner local (tem acesso à sua rede)
+    needs: [build-firmware]                             # exige firmware já buildado
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download firmware
+      - name: Download firmware                         # baixa o binário gerado no job anterior
         uses: actions/download-artifact@v4
         with:
           name: firmware-bin
           path: .
 
-      - name: Deploy OTA to ESP32
+      - name: Deploy OTA to ESP32                       # envia o binário ao endpoint /ota do seu firmware
+        env:
+          OTA_TOKEN: ${{ secrets.OTA_TOKEN }}          # token Bearer (GitHub Secrets)
+          ESP32_IP:  ${{ secrets.ESP32_IP }}           # IP do dispositivo
+          OTA_PORT:  ${{ secrets.OTA_PORT }}           # porta do endpoint (ex.: 8070)
         run: |
           curl -v --http1.1 \
             -H "Connection: close" \
             -H "Content-Type: application/octet-stream" \
-            -H "Authorization: Bearer ${{ secrets.OTA_TOKEN }}" \
+            -H "Authorization: Bearer ${OTA_TOKEN}" \
             --data-binary @ia_automated_irrigation_system.bin \
-            http://${{ secrets.ESP32_IP }}:${{ secrets.OTA_PORT }}/ota
+            http://${ESP32_IP}:${OTA_PORT}/ota
