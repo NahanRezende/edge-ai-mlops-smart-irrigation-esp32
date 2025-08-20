@@ -114,29 +114,47 @@ jobs:
   # =========================
   # 3) OTA para o ESP32 (self-hosted)
   # =========================
-  ota-deploy:
-    if: ${{ github.event.inputs.deploy_ota == 'yes' }}
-    runs-on: [self-hosted, Linux, X64]
-    needs: [build-firmware]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+ota-deploy:
+  if: ${{ github.event.inputs.deploy_ota == 'yes' }}
+  runs-on: [self-hosted, Linux, X64]
+  needs: [build-firmware]
+  env:
+    ESP32_IP_RAW: ${{ secrets.ESP32_IP || vars.ESP32_IP }}
+    OTA_PORT_RAW: ${{ secrets.OTA_PORT || vars.OTA_PORT }}
+    OTA_TOKEN:    ${{ secrets.OTA_TOKEN || vars.OTA_TOKEN }}
+  steps:
+    - uses: actions/checkout@v4
 
-      - name: Download firmware
-        uses: actions/download-artifact@v4
-        with:
-          name: firmware-bin
-          path: .
+    - name: Download firmware
+      uses: actions/download-artifact@v4
+      with:
+        name: firmware-bin
+        path: .
 
-      - name: Deploy OTA to ESP32
-        env:
-          OTA_TOKEN: ${{ secrets.OTA_TOKEN }}
-          ESP32_IP:  ${{ secrets.ESP32_IP }}
-          OTA_PORT:  ${{ secrets.OTA_PORT }}
-        run: |
-          curl -v --http1.1 \
-            -H "Connection: close" \
-            -H "Content-Type: application/octet-stream" \
-            -H "Authorization: Bearer ${OTA_TOKEN}" \
-            --data-binary @ia_automated_irrigation_system.bin \
-            http://${ESP32_IP}:${OTA_PORT}/ota
+    - name: Preflight (sanitiza e valida)
+      id: prep
+      shell: bash
+      run: |
+        set -euo pipefail
+        ESP32_IP="$(echo "${ESP32_IP_RAW:-}" | tr -d ' "')" || true
+        OTA_PORT="$(echo "${OTA_PORT_RAW:-}" | tr -d ' "')" || true
+        [ -n "${ESP32_IP:-}" ] || { echo "::error::ESP32_IP vazio"; exit 1; }
+        [[ "${OTA_PORT:-}" =~ ^[0-9]+$ ]] || { echo "::error::OTA_PORT inválida"; exit 1; }
+        echo "OTA_URL=http://${ESP32_IP}:${OTA_PORT}/ota" >> "$GITHUB_ENV"
+        ls -lh ia_automated_irrigation_system.bin
+
+    - name: Deploy OTA (POST binário)
+      shell: bash
+      run: |
+        set -euo pipefail
+        HDR_AUTH=()
+        if [ -n "${OTA_TOKEN:-}" ]; then
+          HDR_AUTH+=( -H "Authorization: Bearer ${OTA_TOKEN}" )
+        fi
+        curl -v --http1.1 --fail-with-body \
+          -H "Connection: close" \
+          -H "Content-Type: application/octet-stream" \
+          "${HDR_AUTH[@]}" \
+          --data-binary @ia_automated_irrigation_system.bin \
+          "$OTA_URL"
+
