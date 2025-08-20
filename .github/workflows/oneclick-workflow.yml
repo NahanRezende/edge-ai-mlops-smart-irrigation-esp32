@@ -1,46 +1,58 @@
-name: CI/CD Irrigação Inteligente  # nome do workflow
+# CI/CD do meu projeto de Irrigação Inteligente
+# Objetivo: (1) treinar o modelo em Python, (2) compilar o firmware ESP32-S3 usando meu runner
+# e (3) opcionalmente fazer OTA no device da rede local.
+
+name: CI/CD Irrigação Inteligente
 
 on:
+  # eu disparo manualmente e escolho o que rodar
   workflow_dispatch:
     inputs:
       run_train:
         description: "Rodar treino de ML?"
         type: choice
-        options: [ "yes", "no" ]
-        default: "yes"
+        options: ["yes","no"]
+        default: "no"
       run_build:
         description: "Rodar build do firmware?"
         type: choice
-        options: [ "yes", "no" ]
+        options: ["yes","no"]
         default: "yes"
       deploy_ota:
         description: "Fazer OTA no ESP32?"
         type: choice
-        options: [ "yes", "no" ]
-        default: "no"
+        options: ["yes","no"]
+        default: "yes"
 
 jobs:
   # =========================
   # 1) Treino de ML (self-hosted)
   # =========================
   train-ml:
+    # só treino quando eu mandar (run_train == yes)
     if: ${{ github.event.inputs.run_train == 'yes' }}
+    # rodo no meu runner (Linux x64) pra usar meu ambiente local
     runs-on: [self-hosted, Linux, X64]
     steps:
+      # baixo o repo dessa execução
       - name: Checkout
         uses: actions/checkout@v4
 
+      # eu padronizei o Python em 3.11 pra esse projeto
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # instalo as deps do pipeline de treino
       - name: Install deps
         run: pip install -r treinamento_externo/requirements.txt
 
+      # executo o script que treina e exporta o ia_params.h
       - name: Run training
         run: python treinamento_externo/treinar_modelo.py
 
+      # publico os artefatos que o build do firmware pode precisar (ia_params.h, etc.)
       - name: Upload ML artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -54,16 +66,21 @@ jobs:
   # 2) Build do firmware ESP32 (SELF-HOSTED)
   # ===================================
   build-firmware:
+    # compila no meu runner pra reaproveitar toolchain/IDF local
     runs-on: [self-hosted, Linux, X64]
+    # espero o job de treino (quando existir) pra poder baixar os artefatos
     needs: [train-ml]
-    # Se run_build = yes E (train-ml teve sucesso OU foi pulado porque run_train = no)
+    # regra: Só faz build se eu pedir (run_build == yes) e:
+    # - o treino deu success (quando eu mandei treinar) OU
+    # - o treino foi pulado (quando run_train == no)
     if: ${{ github.event.inputs.run_build == 'yes' && (needs['train-ml'].result == 'success' || needs['train-ml'].result == 'skipped') }}
 
     steps:
+      # baixo o repo dessa execução
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Só baixa artefato se o train-ml realmente rodou e subiu
+      # se o treino rodou, eu baixo os artefatos dele
       - name: Download ML artifacts (only if trained)
         if: ${{ needs['train-ml'].result == 'success' }}
         uses: actions/download-artifact@v4
@@ -71,38 +88,33 @@ jobs:
           name: ml-artifacts
           path: ml-artifacts
 
+      # se o ia_params.h existir, eu coloco no lugar que o firmware inclui
       - name: Place generated header (if present)
         run: |
           mkdir -p esp32_firmware/main/ia
-          if [ -f ml-artifacts/ia_params.h ]; then
-            cp ml-artifacts/ia_params.h esp32_firmware/main/ia/ia_params.h
-          fi
-          ls -l esp32_firmware/main/ia || true
+          [ -f ml-artifacts/ia_params.h ] && cp ml-artifacts/ia_params.h esp32_firmware/main/ia/ia_params.h || true
 
-      - name: Build firmware (self-hosted)
+      # build do ESP-IDF:
+      # eu carrego o export.sh no MESMO step (o runner não herda meu shell entre steps)
+      - name: Build firmware
         working-directory: esp32_firmware
         run: |
           set -euo pipefail
-          # Carrega seu ambiente do ESP-IDF neste step
+          # carrego o ambiente do IDF
           source "$HOME/esp/esp-idf/export.sh"
-          idf.py --version
           idf.py set-target esp32s3
 
+          # versão do firmware com branch + sha curto + data + número do run
           GIT_BRANCH="${GITHUB_REF_NAME}"
-          GIT_SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          GIT_SHA_SHORT="${GITHUB_SHA:0:7}"
           BUILD_DATE="$(date -u +%Y%m%d)"
           FW_VERSION="${GIT_BRANCH}-${GIT_SHA_SHORT}-${BUILD_DATE}-run${GITHUB_RUN_NUMBER}"
-          echo "Firmware version: ${FW_VERSION}"
-
           idf.py -DPROJECT_VER="${FW_VERSION}" build
-          ls -l build/*.bin
 
-          # Garante o nome final
-          if [ ! -f build/ia_automated_irrigation_system.bin ]; then
-            APP_BIN="$(ls -S build/*.bin | head -n1)"
-            cp "$APP_BIN" build/ia_automated_irrigation_system.bin
-          fi
+          # se o nome final não existir, eu pego o maior .bin (app) e padronizo
+          [ -f build/ia_automated_irrigation_system.bin ] || cp "$(ls -S build/*.bin | head -n1)" build/ia_automated_irrigation_system.bin
 
+      # publico o .bin pra etapa de OTA
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
@@ -110,48 +122,36 @@ jobs:
           path: esp32_firmware/build/ia_automated_irrigation_system.bin
 
   # =========================
-  # 3) OTA para o ESP32 (self-hosted)
+  # 3) OTA (self-hosted)
   # =========================
   ota-deploy:
+    # só faz deploy com OTA quando eu pedir explicitamente
     if: ${{ github.event.inputs.deploy_ota == 'yes' }}
     runs-on: [self-hosted, Linux, X64]
+    # preciso do binário do build
     needs: [build-firmware]
+    # APENAS secrets (sem fallback pra vars)
     env:
-      ESP32_IP_RAW: ${{ secrets.ESP32_IP || vars.ESP32_IP }}
-      OTA_PORT_RAW: ${{ secrets.OTA_PORT || vars.OTA_PORT }}
-      OTA_TOKEN:    ${{ secrets.OTA_TOKEN || vars.OTA_TOKEN }}
+      ESP32_IP:  ${{ secrets.ESP32_IP }}     # ex.: 192.168.1.9
+      OTA_PORT:  ${{ secrets.OTA_PORT }}     # ex.: 8070
+      OTA_TOKEN: ${{ secrets.OTA_TOKEN }}    # Configurado porém é bom manter em segredo
     steps:
-      - uses: actions/checkout@v4
-
+      # baixo o .bin gerado no job anterior
       - name: Download firmware
         uses: actions/download-artifact@v4
         with:
           name: firmware-bin
           path: .
 
-      - name: Preflight (sanitiza e valida)
-        id: prep
-        shell: bash
-        run: |
-          set -euo pipefail
-          ESP32_IP="$(echo "${ESP32_IP_RAW:-}" | tr -d ' "')" || true
-          OTA_PORT="$(echo "${OTA_PORT_RAW:-}" | tr -d ' "')" || true
-          [ -n "${ESP32_IP:-}" ] || { echo "::error::ESP32_IP vazio"; exit 1; }
-          [[ "${OTA_PORT:-}" =~ ^[0-9]+$ ]] || { echo "::error::OTA_PORT inválida"; exit 1; }
-          echo "OTA_URL=http://${ESP32_IP}:${OTA_PORT}/ota" >> "$GITHUB_ENV"
-          ls -lh ia_automated_irrigation_system.bin
-
-      - name: Deploy OTA (POST binário)
-        shell: bash
+      # envio o .bin por HTTP/1.1 como octet-stream pro endpoint /ota do firmware
+      - name: Deploy OTA
         run: |
           set -euo pipefail
           HDR_AUTH=()
-          if [ -n "${OTA_TOKEN:-}" ]; then
-            HDR_AUTH+=( -H "Authorization: Bearer ${OTA_TOKEN}" )
-          fi
+          [ -n "${OTA_TOKEN:-}" ] && HDR_AUTH+=( -H "Authorization: Bearer ${OTA_TOKEN}" )
           curl -v --http1.1 --fail-with-body \
             -H "Connection: close" \
             -H "Content-Type: application/octet-stream" \
             "${HDR_AUTH[@]}" \
             --data-binary @ia_automated_irrigation_system.bin \
-            "$OTA_URL"
+            "http://${ESP32_IP}:${OTA_PORT}/ota"
