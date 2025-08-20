@@ -1,0 +1,23 @@
+menu "Configurações do Projeto (Wi-Fi)"
+
+config WIFI_SSID
+    string "Wi-Fi SSID (2.4GHz)"
+    default "WIFIDOBRUTO"
+
+config WIFI_PASS
+    string "Wi-Fi Password"
+    default "@Bruto29"
+
+endmenu
+
+menu "OTA (atualização via Wi-Fi)"
+
+config OTA_BIND_PORT
+    int "Porta HTTP do endpoint /ota"
+    default 8070
+
+config OTA_AUTH_TOKEN
+    string "Token Bearer para proteger o /ota"
+    default "25018aa1bcf4ae117ac9eb42ec61533a9e3225194453af5636c13d4f57c1b17d"
+
+endmenu

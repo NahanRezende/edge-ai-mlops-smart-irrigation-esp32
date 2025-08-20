@@ -1,0 +1,32 @@
+# venv
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+
+# ESP-IDF build cache
+esp32_firmware/build/*
+esp32_firmware/.cache/
+esp32_firmware/sdkconfig.old
+
+# Treino (artefatos locais)
+coleta_dados/ia_params.h
+coleta_dados/model.pkl
+coleta_dados/scaler.pkl
+coleta_dados/metrics.txt
+coleta_dados/pesos_bias.json
+coleta_dados/*.csv
+
+# Firmware header (decida uma das opções abaixo)
+# Opção A — permitir PRs com o header (recomendado): NÃO ignore
+# esp32_firmware/main/ia/ia_params.h
+
+# Opção B — manter ignorado e forçar add no CI:
+# esp32_firmware/main/ia/ia_params.h

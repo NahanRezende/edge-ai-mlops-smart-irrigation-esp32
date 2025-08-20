@@ -1,53 +1,76 @@
 import requests
 import pandas as pd
+from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
-# 📍 Configurações
+# Configurações
 latitude = -19.82   # João Monlevade - MG
 longitude = -43.17
 start_year = 2020
-end_year = 2024
+end_year = datetime.now(ZoneInfo("America/Sao_Paulo")).year  # ano atual
 
-# 📦 Coleta dos dados por ano
+today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
 df_total = pd.DataFrame()
 
 for year in range(start_year, end_year + 1):
     start_date = f"{year}-01-01"
-    end_date = f"{year}-12-31"
+    end_date = today.isoformat() if year == end_year else f"{year}-12-31"
 
     url = (
-        f"https://archive-api.open-meteo.com/v1/archive?"
-        f"latitude={latitude}&longitude={longitude}"
+        "https://archive-api.open-meteo.com/v1/archive"
+        f"?latitude={latitude}&longitude={longitude}"
         f"&start_date={start_date}&end_date={end_date}"
-        f"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
-        f"&timezone=America/Sao_Paulo"
+        "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
+        "&timezone=America/Sao_Paulo"
     )
 
-    response = requests.get(url)
-    data = response.json()
+    try:
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        print(f"❌ Falha HTTP no ano {year}: {e}")
+        continue
 
-    if "daily" in data:
-        df = pd.DataFrame(data["daily"])
-        df_total = pd.concat([df_total, df], ignore_index=True)
-        print(f"✅ Dados de {year} coletados com sucesso.")
-    else:
-        print(f"❌ Falha ao coletar dados de {year}")
+    daily = data.get("daily")
+    if not daily:
+        print(f"❌ Sem bloco 'daily' no ano {year}. Payload: {data.keys()}")
+        continue
 
-# 🧹 Limpeza e padronização
-df_total.dropna(inplace=True)
-df_total["time"] = pd.to_datetime(df_total["time"])
-df_total.rename(columns={
+    df = pd.DataFrame(daily)
+
+    # Sanitiza colunas esperadas
+    if not {"time", "temperature_2m_max", "temperature_2m_min", "precipitation_sum"} <= set(df.columns):
+        print(f"❌ Colunas inesperadas no ano {year}: {df.columns.tolist()}")
+        continue
+
+    # Converte tipos e remove linhas ruins
+    df["time"] = pd.to_datetime(df["time"], errors="coerce", utc=False)
+    # precipitação não-negativa
+    df["precipitation_sum"] = pd.to_numeric(df["precipitation_sum"], errors="coerce").clip(lower=0.0)
+    df["temperature_2m_max"] = pd.to_numeric(df["temperature_2m_max"], errors="coerce")
+    df["temperature_2m_min"] = pd.to_numeric(df["temperature_2m_min"], errors="coerce")
+    df = df.dropna(subset=["time", "temperature_2m_max", "temperature_2m_min", "precipitation_sum"])
+
+    if df.empty:
+        print(f"⚠️ Sem linhas válidas no ano {year}")
+        continue
+
+    df_total = pd.concat([df_total, df], ignore_index=True)
+    print(f"✅ Dados de {year} coletados: {len(df)} linhas")
+
+# Verificações antes de salvar
+if df_total.empty:
+    raise RuntimeError("Nenhum dado coletado. Verifique a rede/URL/intervalos.")
+
+df_total = df_total.rename(columns={
     "time": "data",
     "temperature_2m_max": "temp_max",
     "temperature_2m_min": "temp_min",
     "precipitation_sum": "chuva_mm"
-}, inplace=True)
+})[["data", "temp_max", "temp_min", "chuva_mm"]]
 
-# 📊 Seleção de colunas relevantes
-colunas = ["data", "temp_max", "temp_min", "chuva_mm"]
-df_final = df_total[colunas]
-
-# 💾 Salvando o CSV tratado
-output_path = "../esp32_firmware/data/dados_climaticos_tratados.csv"
-df_final.to_csv(output_path, index=False)
-print(f"📁 Dados tratados salvos em: {output_path}")
+output_path = Path(__file__).resolve().parent / "dados_climaticos_tratados.csv"
+df_total.to_csv(output_path, index=False, float_format="%.3f")
+print(f"📁 Dados tratados salvos em: {output_path} | linhas={len(df_total)}")

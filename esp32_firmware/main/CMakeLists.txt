@@ -1,12 +1,36 @@
 idf_component_register(
-  SRCS 
+  SRCS
     "main.c"
-    "sensores/dht22/dht.c"
-    "sensores/ldr/ldr.c"
-    "sensores/moisture/moisture.c"
-  INCLUDE_DIRS 
+    "wifi/wifi.c"
+    "ota/ota_server.c"
+    "pump/pump.c"
+    "sensors/adc_shared/adc_shared.c"
+    "sensors/ldr/ldr.c"
+    "sensors/moisture/moisture.c"
+    "sensors/dht22/dht.c"
+    "decider/decider.c"
+    "forecast/forecast.c"
+    "ia/ia.c"
+  INCLUDE_DIRS
     "."
-    "sensores/dht22"
-    "sensores/ldr"
-    "sensores/moisture"
+    "wifi"
+    "ota"
+    "pump"
+    "sensors/adc_shared"
+    "sensors/ldr"
+    "sensors/moisture"
+    "sensors/dht22"
+    "decider"
+    "forecast"
+    "ia"
+  REQUIRES
+    driver
+    esp_timer
+    esp_adc
+    esp_wifi
+    esp_netif
+    nvs_flash
+    esp_event
+    esp_http_server
+    app_update
 )
