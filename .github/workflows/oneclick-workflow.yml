@@ -1,138 +1,142 @@
-name: CI/CD Irrigação Inteligente                          # nome do workflow
+name: CI/CD Irrigação Inteligente  # nome do workflow
 
-on:                                                        # gatilhos que disparam o workflow
-  push:                                                    # quando houver commit...
-    branches: [ "main" ]                                   # ...no branch main
-  pull_request:                                            # quando abrirem PR...
-    branches: [ "main" ]                                   # ...para o branch main
-  workflow_dispatch:                                       # execução manual com parâmetros
+on:
+  # botão "Run workflow" com parâmetros
+  workflow_dispatch:
     inputs:
-      run_train:                                           # liga/desliga treino
+      run_train:
         description: "Rodar treino de ML?"
         type: choice
         options: [ "yes", "no" ]
         default: "yes"
-      run_build:                                           # liga/desliga build
+      run_build:
         description: "Rodar build do firmware?"
         type: choice
         options: [ "yes", "no" ]
         default: "yes"
-      deploy_ota:                                          # liga/desliga OTA
+      deploy_ota:
         description: "Fazer OTA no ESP32?"
         type: choice
         options: [ "yes", "no" ]
         default: "no"
 
-jobs:                                                      # definição dos jobs
+jobs:
 
-  train-ml:                                                # job de treino de ML
-    if: >-                                                 # regra: roda em push/PR, ou manual quando marcado
-      ${{
-        github.event_name != 'workflow_dispatch' ||
-        github.event.inputs.run_train == 'yes'
-      }}
-    runs-on: ubuntu-latest                                 # usa runner GitHub-hosted
+  # =========================
+  # 1) Treino de ML (self-hosted)
+  # =========================
+  train-ml:
+    if: ${{ github.event.inputs.run_train == 'yes' }}   # roda só se for "yes"
+    runs-on: [self-hosted, Linux, X64]                  # seu runner local
     steps:
-      - name: Checkout                                     # baixa o repositório
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4                       # baixa o código
 
-      - name: Setup Python                                 # instala Python 3.11
-        uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5                   # provisiona Python
         with:
           python-version: "3.11"
 
-      - name: Install deps                                 # instala dependências do treino
-        run: pip install -r coleta_dados/requirements.txt
+      - name: Install deps
+        run: pip install -r coleta_dados/requirements.txt   # dependências do treino
 
-      - name: Run training                                 # executa pipeline de treino
-        run: python coleta_dados/treinar_modelo.py
+      - name: Run training
+        run: python coleta_dados/treinar_modelo.py          # gera artefatos (ia_params.h, pkl, csv)
 
-      - name: Upload ML artifacts                          # envia artefatos gerados
-        uses: actions/upload-artifact@v4
+      - name: Upload ML artifacts
+        uses: actions/upload-artifact@v4                    # publica artefatos p/ outros jobs
         with:
-          name: ml-artifacts                               # nome do pacote de artefatos
-          path: |                                          # arquivos a salvar
+          name: ml-artifacts
+          path: |
             coleta_dados/ia_params.h
             coleta_dados/*.pkl
             coleta_dados/*.csv
 
-  build-firmware:                                          # job de build do firmware
-    if: >-                                                 # regra: roda em push/PR, ou manual quando marcado
-      ${{
-        github.event_name != 'workflow_dispatch' ||
-        github.event.inputs.run_build == 'yes'
-      }}
-    runs-on: ubuntu-latest                                 # usa runner GitHub-hosted
+  # ===================================
+  # 2) Build do firmware ESP32 (GitHub-hosted)
+  #    -> usa action oficial da Espressif CORRETA
+  # ===================================
+  build-firmware:
+    if: ${{ github.event.inputs.run_build == 'yes' }}   # roda só se for "yes"
+    runs-on: ubuntu-latest                              # runner do GitHub
+
     steps:
-      - name: Checkout                                     # baixa o repositório
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup ESP-IDF                                # instala o ESP-IDF (action oficial)
-        uses: espressif/setup-esp-idf@v1
-        with:
-          version: v5.4.1                                  # mesma versão usada no seu projeto
-
-      - name: Download ML artifacts (if any)               # baixa artefatos do treino (se existirem)
+      # baixa artefatos de ML apenas se o treino rodou neste workflow
+      - name: Download ML artifacts (if trained)
+        if: ${{ github.event.inputs.run_train == 'yes' }}
         uses: actions/download-artifact@v4
-        continue-on-error: true                            # não falha se não houver artefatos
         with:
           name: ml-artifacts
-          path: esp32_firmware/components/ml
+          path: esp32_firmware/components/ml            # onde o firmware espera encontrar
 
-      - name: Build firmware                               # compila e injeta versão no PROJECT_VER
-        shell: bash
+      # Action CORRETA da Espressif para preparar o ESP-IDF
+      - name: Setup ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4                         # alinha com seu projeto (5.4.x)
+
+      - name: Build firmware
         run: |
-          GIT_BRANCH="${GITHUB_REF_NAME}"                  # nome do branch
-          GIT_SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"  # 7 chars do SHA
-          BUILD_DATE="$(date -u +%Y%m%d)"                  # data UTC compacta
-          FW_VERSION="${GIT_BRANCH}-${GIT_SHA_SHORT}-${BUILD_DATE}-run${GITHUB_RUN_NUMBER}"  # tag de versão
-          echo "Firmware version: ${FW_VERSION}"           # log de versão
-          cd esp32_firmware                                # entra na pasta do firmware
-          idf.py -DPROJECT_VER="${FW_VERSION}" build       # compila com PROJECT_VER definido
+          # gera uma versão amigável (branch-sha-data-runN)
+          GIT_BRANCH="${GITHUB_REF_NAME}"
+          GIT_SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          BUILD_DATE="$(date -u +%Y%m%d)"
+          FW_VERSION="${GIT_BRANCH}-${GIT_SHA_SHORT}-${BUILD_DATE}-run${GITHUB_RUN_NUMBER}"
+          echo "Firmware version: ${FW_VERSION}"
 
-      - name: Rename final app .bin                        # padroniza nome do binário final
-        shell: bash
-        run: |
-          cd esp32_firmware/build
-          APP_BIN="$(ls -1 *.bin | grep -Ev 'bootloader|partition|ota_data|boot_app0' | sort -n | tail -1)"  # escolhe o .bin da app
-          cp -f "$APP_BIN" ia_automated_irrigation_system.bin  # renomeia para o nome desejado
-          ls -lh ia_automated_irrigation_system.bin        # lista para conferência
+          cd esp32_firmware
+          idf.py -DPROJECT_VER="${FW_VERSION}" build     # compila
 
-      - name: Upload firmware                              # publica o .bin renomeado
-        uses: actions/upload-artifact@v4
+          # Garante o nome final do bin (caso seu CMake já não renomeie)
+          if [ -f build/ia_automated_irrigation_system.bin ]; then
+            echo "Arquivo final já está com o nome esperado."
+          else
+            # tenta descobrir o .bin principal (app) e renomeia
+            APP_BIN="$(ls -1 build/*.bin | grep -E '/(project|app|.*)\.bin$' || true)"
+            if [ -z "$APP_BIN" ]; then
+              # fallback: pega o maior .bin (normalmente o app)
+              APP_BIN="$(ls -S build/*.bin | head -n1)"
+            fi
+            echo "Renomeando $APP_BIN -> build/ia_automated_irrigation_system.bin"
+            cp "$APP_BIN" build/ia_automated_irrigation_system.bin
+          fi
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4                 # publica o .bin para o job de OTA
         with:
           name: firmware-bin
           path: esp32_firmware/build/ia_automated_irrigation_system.bin
 
-  ota-deploy:                                              # job de OTA
-    if: >-                                                 # só roda manualmente quando marcado
-      ${{
-        github.event_name == 'workflow_dispatch' &&
-        github.event.inputs.deploy_ota == 'yes'
-      }}
-    runs-on: self-hosted                                   # precisa rodar no seu runner local (acessa o ESP32)
-    needs: [build-firmware]                                # espera o build terminar
+  # =========================
+  # 3) OTA para o ESP32 (self-hosted)
+  # =========================
+  ota-deploy:
+    if: ${{ github.event.inputs.deploy_ota == 'yes' }}  # roda só se for "yes"
+    runs-on: [self-hosted, Linux, X64]                  # precisa estar na mesma rede do ESP32
+    needs: [build-firmware]                             # garante que o binário existe
     steps:
-      - name: Checkout                                     # baixa o repositório (opcional, mas útil p/ logs)
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download firmware                            # baixa o .bin do job de build
-        uses: actions/download-artifact@v4
+      - name: Download firmware
+        uses: actions/download-artifact@v4              # traz o .bin gerado no build
         with:
           name: firmware-bin
           path: .
 
-      - name: Deploy OTA to ESP32                          # envia o .bin via HTTP pro seu dispositivo
-        shell: bash
-        env:                                               # usa segredos do repo
-          OTA_TOKEN: ${{ secrets.OTA_TOKEN }}              # token Bearer do endpoint OTA
-          ESP32_IP:  ${{ secrets.ESP32_IP }}               # IP do ESP32 (na mesma rede do runner)
-          OTA_PORT:  ${{ secrets.OTA_PORT }}               # porta do servidor OTA (ex.: 8070)
+      - name: Deploy OTA to ESP32
+        env:
+          OTA_TOKEN: ${{ secrets.OTA_TOKEN }}          # token Bearer salvo nos Secrets
+          ESP32_IP:  ${{ secrets.ESP32_IP }}           # IP do seu device
+          OTA_PORT:  ${{ secrets.OTA_PORT }}           # porta (ex.: 8070)
         run: |
-          test -n "$OTA_PORT" || OTA_PORT=8070             # default da porta se não setado
-          curl -v --http1.1 \                              # faz upload via HTTP/1.1
-            -H "Connection: close" \                       # fecha a conexão ao final
-            -H "Content-Type: application/octet-stream" \  # conteúdo binário
-            -H "Authorization: Bearer ${OTA_TOKEN}" \      # autenticação Bearer
-            --data-binary @ia_automated_irrigation_system.bin \  # arquivo enviado
-            "http://${ESP32_IP}:${OTA_PORT}/ota"           # endpoint do device
+          # envia binário via HTTP/1.1 para o endpoint /ota do seu firmware
+          curl -v --http1.1 \
+            -H "Connection: close" \
+            -H "Content-Type: application/octet-stream" \
+            -H "Authorization: Bearer ${OTA_TOKEN}" \
+            --data-binary @ia_automated_irrigation_system.bin \
+            http://${ESP32_IP}:${OTA_PORT}/ota
