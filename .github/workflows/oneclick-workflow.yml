@@ -1,12 +1,11 @@
-# CI/CD do meu projeto de Irrigação Inteligente
-# Objetivo: compilar o firmware ESP32-S3 no meu runner e fazer OTA na placa.
-# O treino de ML é opcional: se eu mandar treinar, o build usa o artefato;
-# se não, o build usa o ia_params.h que já está versionado no repo.
+# CI/CD do projeto de Irrigação Inteligente
+# Meta: compilar o firmware ESP32-S3 no runner self-hosted e realizar OTA na placa.
+# O treino de ML é opcional: se acionado, o build usa o artefato; caso contrário, usa o ia_params.h versionado no repositório.
 
 name: CI/CD Irrigação Inteligente
 
 on:
-  # Disparo manualmente e só escolho se quero treinar ou não
+  # Disparo manual com opção apenas para o treino
   workflow_dispatch:
     inputs:
       run_train:
@@ -18,30 +17,29 @@ on:
 jobs:
   # 1) Treino de ML (self-hosted, OPCIONAL)
   train-ml:
-    # Eu sempre executo o job pra não bloquear ninguém,
-    # mas as etapas só rodam quando eu seleciono "yes".
+    # Executa sempre o job; etapas internas só rodam quando run_train == "yes".
     runs-on: [self-hosted, Linux, X64]
     outputs:
-      did_train: ${{ steps.flags.outputs.did_train }}  # flag dizendo se treinei
+      did_train: ${{ steps.flags.outputs.did_train }}  # expõe flag indicando se houve treino
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python (só se eu mandei treinar)
+      - name: Setup Python (apenas quando o treino for solicitado)
         if: ${{ github.event.inputs.run_train == 'yes' }}
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps (só se eu mandei treinar)
+      - name: Instalar dependências (apenas quando o treino for solicitado)
         if: ${{ github.event.inputs.run_train == 'yes' }}
         run: pip install -r treinamento_externo/requirements.txt
 
-      - name: Run training (gera ia_params.h, etc)
+      - name: Executar treino (gera ia_params.h, etc.)
         if: ${{ github.event.inputs.run_train == 'yes' }}
         run: python treinamento_externo/treinar_modelo.py
 
-      - name: Upload ML artifacts (disponibiliza pro build)
+      - name: Publicar artefatos de ML (disponibiliza para o build)
         if: ${{ github.event.inputs.run_train == 'yes' }}
         uses: actions/upload-artifact@v4
         with:
@@ -51,7 +49,7 @@ jobs:
             treinamento_externo/*.pkl
             treinamento_externo/*.csv
 
-      - name: Set train flag (true/false)
+      - name: Definir flag de treino (true/false)
         id: flags
         run: |
           if [ "${{ github.event.inputs.run_train }}" = "yes" ]; then
@@ -62,59 +60,68 @@ jobs:
 
   # 2) Build do firmware ESP32 (SELF-HOSTED) — OBRIGATÓRIO
   build-firmware:
-    # compilo no meu runner pra reaproveitar o toolchain/IDF local
+    # Compila no runner self-hosted para reaproveitar o toolchain/ESP-IDF local.
     runs-on: [self-hosted, Linux, X64]
-    # espero o job de treino (ele sempre finaliza; pode ter treinado ou não)
+    # Aguarda o job de treino (sempre finaliza; pode ou não treinar).
     needs: [train-ml]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Se treinei agora, baixo os artefatos; senão, vou usar os arquivos do repo
-      - name: Download ML artifacts (only if trained)
+      # Se houve treino neste run, baixa os artefatos; caso contrário, usará o arquivo versionado.
+      - name: Baixar artefatos de ML (somente quando houve treino)
         if: ${{ needs['train-ml'].outputs.did_train == 'true' }}
         uses: actions/download-artifact@v4
         with:
           name: ml-artifacts
           path: ml-artifacts
 
-      # Escolho a fonte do ia_params.h:
-      # 1) se veio do treino, usa o artefato;
-      # 2) caso contrário, usa o arquivo versionado no repo (fallback).
-      - name: Place ML header (artifact or repo fallback)
+      # Seleciona a origem do ia_params.h:
+      # 1) artefato gerado no treino; 2) arquivo versionado em treinamento_externo/; 3) raiz (fallback final).
+      - name: Posicionar header de ML (artefato ou fallback do repositório)
         run: |
           set -euo pipefail
           mkdir -p esp32_firmware/main/ia
+
           if [ -f ml-artifacts/ia_params.h ]; then
-            cp ml-artifacts/ia_params.h esp32_firmware/main/ia/ia_params.h
-            echo "Usando ia_params.h do artefato de treino."
+            SRC="ml-artifacts/ia_params.h"
+            echo "Usando ia_params.h do artefato de treino: $SRC"
+          elif [ -f treinamento_externo/ia_params.h ]; then
+            SRC="treinamento_externo/ia_params.h"
+            echo "Usando ia_params.h versionado: $SRC"
           elif [ -f ia_params.h ]; then
-            cp ia_params.h esp32_firmware/main/ia/ia_params.h
-            echo "Usando ia_params.h versionado no repositório."
+            SRC="ia_params.h"
+            echo "Usando ia_params.h na raiz: $SRC"
           else
-            echo "::error::ia_params.h não encontrado nem no artefato nem no repo."
+            echo "::error::ia_params.h não encontrado. Procurado em:"
+            echo " - ml-artifacts/ia_params.h"
+            echo " - treinamento_externo/ia_params.h"
+            echo " - ia_params.h (raiz)"
             exit 1
           fi
 
-      # build do ESP-IDF (carrego o export.sh no MESMO step)
-      - name: Build firmware
+          cp "$SRC" esp32_firmware/main/ia/ia_params.h
+          ls -l esp32_firmware/main/ia/
+
+      # Build do ESP-IDF: carrega-se o export.sh no MESMO step (não há herança entre steps).
+      - name: Compilar firmware
         working-directory: esp32_firmware
         run: |
           set -euo pipefail
           source "$HOME/esp/esp-idf/export.sh"
           idf.py set-target esp32s3
 
-          # versão do firmware com branch + sha curto + data + número do run
+          # Versão do firmware: branch + SHA curto + data + número do run
           GIT_BRANCH="${GITHUB_REF_NAME}"
           GIT_SHA_SHORT="${GITHUB_SHA:0:7}"
           BUILD_DATE="$(date -u +%Y%m%d)"
           FW_VERSION="${GIT_BRANCH}-${GIT_SHA_SHORT}-${BUILD_DATE}-run${GITHUB_RUN_NUMBER}"
           idf.py -DPROJECT_VER="${FW_VERSION}" build
 
-          # se o nome final não existir, padronizo pegando o maior .bin (app)
+          # Se o nome final não existir, padroniza pegando o maior .bin (app)
           [ -f build/ia_automated_irrigation_system.bin ] || cp "$(ls -S build/*.bin | head -n1)" build/ia_automated_irrigation_system.bin
 
-      - name: Upload firmware (.bin) para o job de OTA
+      - name: Publicar firmware (.bin) para o job de OTA
         uses: actions/upload-artifact@v4
         with:
           name: firmware-bin
@@ -122,21 +129,21 @@ jobs:
 
   # 3) OTA (SELF-HOSTED) — OBRIGATÓRIO
   ota-deploy:
-    # eu sempre faço OTA depois do build (obrigatório)
+    # Realiza OTA após o build.
     runs-on: [self-hosted, Linux, X64]
     needs: [build-firmware]
     env:
       ESP32_IP:  ${{ secrets.ESP32_IP }}     # ex.: 192.168.1.9
       OTA_PORT:  ${{ secrets.OTA_PORT }}     # ex.: 8070
-      OTA_TOKEN: ${{ secrets.OTA_TOKEN }}    # se o handler /ota usa Bearer
+      OTA_TOKEN: ${{ secrets.OTA_TOKEN }}    # se o endpoint /ota exigir Bearer
     steps:
-      - name: Download firmware
+      - name: Baixar firmware
         uses: actions/download-artifact@v4
         with:
           name: firmware-bin
           path: .
 
-      - name: Deploy OTA (POST octet-stream no /ota)
+      - name: Enviar OTA (POST octet-stream em /ota)
         run: |
           set -euo pipefail
           HDR_AUTH=()
