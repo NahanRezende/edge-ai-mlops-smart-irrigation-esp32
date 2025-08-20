@@ -34,10 +34,12 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps
-        run: pip install -r coleta_dados/requirements.txt
+        run: pip install -r requirements.txt
+        working-directory: coleta_dados
 
       - name: Run training
-        run: python coleta_dados/treinar_modelo.py
+        run: python treinar_modelo.py
+        working-directory: coleta_dados
 
       - name: Upload ML artifacts
         uses: actions/upload-artifact@v4
@@ -49,13 +51,13 @@ jobs:
             coleta_dados/*.csv
 
   build-firmware:
-    if: ${{ github.event.inputs.run_build == 'yes' }}
+    needs: [train-ml]
+    if: ${{ github.event.inputs.run_build == 'yes' && (github.event.inputs.run_train == 'no' || needs.train-ml.result == 'success') }}
     runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Baixa artefatos de ML apenas se o treino foi executado
       - name: Download ML artifacts
         if: ${{ github.event.inputs.run_train == 'yes' }}
         uses: actions/download-artifact@v4
