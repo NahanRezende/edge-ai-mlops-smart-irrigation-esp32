@@ -68,20 +68,20 @@ void app_main(void) {
 //         }
 
 //         // Leitura do LDR
-//         // int lum = ldr_get_luminosidade();
-//         // if (lum < 0 || lum > 100) {
-//         //     printf("⚠️ LDR desconectado ou valor inválido\n");
-//         // } else {
-//         //     printf("💡 Luminosidade: %d%%\n", lum);
-//         // }
+//         int lum = ldr_get_luminosidade();
+//         if (lum < 0 || lum > 100) {
+//             printf("⚠️ LDR desconectado ou valor inválido\n");
+//         } else {
+//             printf("💡 Luminosidade: %d%%\n", lum);
+//         }
 
 //         // Leitura do sensor de umidade do solo
-//         // int solo = moisture_get_umidade();
-//         // if (solo < 0 || solo > 100) {
-//         //     printf("⚠️ Sensor de umidade do solo desconectado ou valor inválido\n");
-//         // } else {
-//         //     printf("🌱 Umidade do solo: %d%%\n", solo);
-//         // }
+//         int solo = moisture_get_umidade();
+//         if (solo < 0 || solo > 100) {
+//             printf("⚠️ Sensor de umidade do solo desconectado ou valor inválido\n");
+//         } else {
+//             printf("🌱 Umidade do solo: %d%%\n", solo);
+//         }
 
 //         // Aguarda 2 segundos
 //         vTaskDelay(pdMS_TO_TICKS(2000));

@@ -47,8 +47,8 @@ bool dht_read(gpio_num_t pin, float *temperature, float *humidity) {
         }
     }
 
-    ESP_LOGI(TAG, "Bits lidos: %d", j);
-    ESP_LOGI(TAG, "Dados brutos: [%d, %d, %d, %d, %d]", data[0], data[1], data[2], data[3], data[4]);
+    ESP_LOGI(TAG, "DHT22 -> Bits lidos: %d", j);
+    // ESP_LOGI(TAG, "Dados brutos: [%d, %d, %d, %d, %d]", data[0], data[1], data[2], data[3], data[4]);
 
     if (j < 40) {
         ESP_LOGE(TAG, "Dados insuficientes (%d bits)", j);

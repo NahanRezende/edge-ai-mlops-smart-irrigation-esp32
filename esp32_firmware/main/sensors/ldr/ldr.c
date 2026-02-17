@@ -19,6 +19,9 @@ int ldr_get_luminosidade(void) {
         ESP_LOGE(TAG, "Falha ao ler LDR: %s", esp_err_to_name(err));
         return -1;
     }
+
+    ESP_LOGI(TAG, "LDR raw=%d", raw);
+
     int lum = (raw * 100) / 4095;
     if (lum < 0) lum = 0;
     if (lum > 100) lum = 100;

@@ -18,7 +18,13 @@ int moisture_read_raw(void) {
 
 int moisture_get_umidade(void) {
     int raw = moisture_read_raw();
-    int umidade = 100 - ((raw * 100) / 4095);  // simples: seco≈4095, molhado≈0
+
+    ESP_LOGI(TAG_SOIL, "raw=%d", raw);
+
+    // int umidade = 100 - ((raw * 100) / 4095); // simples: seco≈4095, molhado≈0
+
+    int umidade = (SOIL_RAW_SECO - raw) * 100 / (SOIL_RAW_SECO - SOIL_RAW_MOLHADO);
+
     if (umidade < 0) umidade = 0;
     if (umidade > 100) umidade = 100;
     return umidade;

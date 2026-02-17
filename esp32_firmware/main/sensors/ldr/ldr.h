@@ -9,6 +9,7 @@
 #define TAG "LDR"
 #define LDR_ADC_UNIT       ADC_UNIT_1
 #define LDR_ADC_CHANNEL    ADC_CHANNEL_5   // GPIO6 = ADC1_CHANNEL_5
+// #define LDR_ADC_CHANNEL ADC_CHANNEL_3   // GPIO4 = ADC1_CH3 (comum no S3)
 #define LDR_ATTEN          ADC_ATTEN_DB_12
 
 void ldr_init(void);
