@@ -26,6 +26,14 @@
 #define MIN_ON_MS            30000u   // 30 s
 #define MIN_OFF_MS           120000u  // 120 s
 
+// --- Threshold adaptativo (solo regula urgência) ---
+#define SOIL_REF_UMIDO_PCT      40.0f   // acima disso, solo “úmido” -> reduz chance de irrigar
+#define IA_TH_ADJ_MAX           0.20f   // ajuste máximo nos thresholds (0.15~0.25 é um bom intervalo)
+
+// Quanto o solo "puxa" o logit quando está úmido.
+// 1.5 ~ 3.0 costuma ser um intervalo bom. Começa em 2.5.
+#define IA_SOIL_LOGIT_PENALTY  5.5f
+
 // (Opcional) Gate por LDR
 #define LDR_ESCURO_MV        400.0f
 

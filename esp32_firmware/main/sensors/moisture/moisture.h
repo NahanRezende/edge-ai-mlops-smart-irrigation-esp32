@@ -9,8 +9,8 @@
 #define MOISTURE_ADC_CHANNEL ADC_CHANNEL_6
 #define MOISTURE_ATTEN        ADC_ATTEN_DB_12
 
-#define SOIL_RAW_SECO     4095
-#define SOIL_RAW_MOLHADO  3800
+#define SOIL_RAW_SECO     2600
+#define SOIL_RAW_MOLHADO  1000
 
 void moisture_init(void);
 int moisture_get_umidade(void);  // Retorna umidade em porcentagem (0-100)

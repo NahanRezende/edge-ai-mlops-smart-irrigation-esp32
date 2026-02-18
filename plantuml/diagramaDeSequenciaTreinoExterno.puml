@@ -1,5 +1,5 @@
 @startuml
-title Sequência — Treino e exportação
+title Diagrama de Sequência — Treino e exportação
 
 participant TreinarModelo
 participant ColetaDados

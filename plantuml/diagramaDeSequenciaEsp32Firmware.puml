@@ -1,5 +1,5 @@
 @startuml
-title Sequência — Ciclo de irrigação (esp32_firmware)
+title Diagrama de Sequência — Ciclo de irrigação Firmware
 
 participant Main
 participant Decider

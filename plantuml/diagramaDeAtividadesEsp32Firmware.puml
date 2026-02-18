@@ -1,0 +1,131 @@
+@startuml
+title Diagrama de Atividades — Esp32 Firmware
+start
+
+:app_main();
+:app_config.h (macros/thresholds de configuração);
+
+:ESP_LOGI("app","init Wi-Fi");
+:wifi_init_sta();
+:esp_wifi_set_ps(WIFI_PS_NONE);
+if (wifi_wait_connected(15000)?) then (sim)
+  :ESP_LOGI("app","Wi-Fi OK (IP obtido)");
+else (não)
+  :ESP_LOGW("app","sem IP após 15s; seguindo mesmo assim");
+endif
+
+:ESP_LOGI("app","iniciando OTA server");
+:ota_server_start();
+if (CONFIG_OTA_AUTH_TOKEN vazio?) then (sim)
+  :ota_auth_required() == false
+(sem auth);
+else (não)
+  :ota_auth_required() == true
+(com auth Bearer);
+endif
+
+:dht_init(DHT_GPIO, DHT_TYPE_DHT22);
+:moisture_init();
+if (APP_USE_LDR_GATE?) then (sim)
+  :ldr_init();
+else (não)
+  :ldr_init();
+  note right
+    LDR inicializa no app_main;
+    gate no decider só atua com APP_USE_LDR_GATE=1.
+  end note
+endif
+
+:pump_init();
+:decider_init();
+
+while (true)
+  :bool on = false;
+  if (decider_tick(&on)?) then (true)
+    :pump_set(on);
+  else (false)
+    :sem mudança de estado da bomba;
+  endif
+  :vTaskDelay(pdMS_TO_TICKS(DECIDER_TICK_MS));
+
+  partition "decider_tick(bool *out_on)" {
+    if (out_on == NULL?) then (sim)
+      :return false;
+      detach
+    else (não)
+    endif
+
+    :soil = READ_SOIL_PCT();
+    :tc = READ_TEMP_C();
+    :rh = READ_RH_PCT();
+    :ch24 = forecast_chuva24h_now();
+
+    if (is_hot_window() && soil >= SOLO_CRITICO_PCT?) then (sim)
+      if (s_prev?) then (sim)
+        if (now_ms()-s_last_switch_ms < MIN_ON_MS?) then (sim)
+          :*out_on = true; return true;
+          detach
+        else (não)
+          :s_prev = false;
+          :s_last_switch_ms = now_ms();
+        endif
+      endif
+      :*out_on = false; return true;
+      detach
+    else (não)
+    endif
+
+    if ((ch24 >= CHUVA_BLOQUEIO_MM24) &&
+(soil >= SOLO_OK_PCT)?) then (sim)
+      if (s_prev?) then (sim)
+        if (now_ms()-s_last_switch_ms < MIN_ON_MS?) then (sim)
+          :*out_on = true; return true;
+          detach
+        else (não)
+          :s_prev = false;
+          :s_last_switch_ms = now_ms();
+        endif
+      endif
+      :*out_on = false; return true;
+      detach
+    else (não)
+    endif
+
+    if (APP_USE_LDR_GATE?) then (sim)
+      :ldr_mv = READ_LDR_MV();
+      note right
+        regra de gate por LDR é opcional
+        (placeholder no código).
+      end note
+    else (não)
+      :skip LDR gate;
+    endif
+
+    :build_features(in);
+    :vote = ia_should_irrigate_hysteresis(
+in, IA_LOW_TH, IA_HIGH_TH, s_prev);
+
+    if (vote && !s_prev?) then (sim)
+      if (now_ms()-s_last_switch_ms < MIN_OFF_MS?) then (sim)
+        :vote = false;
+      endif
+    else (não)
+      if (!vote && s_prev?) then (sim)
+        if (now_ms()-s_last_switch_ms < MIN_ON_MS?) then (sim)
+          :vote = true;
+        endif
+      endif
+    endif
+
+    if (vote != s_prev?) then (sim)
+      :s_prev = vote;
+      :s_last_switch_ms = now_ms();
+    endif
+
+    :*out_on = s_prev;
+    :return true;
+  }
+endwhile
+
+stop
+@enduml

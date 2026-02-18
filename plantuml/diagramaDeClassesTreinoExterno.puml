@@ -1,5 +1,5 @@
 @startuml
-title Diagrama de Classes — coleta_dados (sem duplicação)
+title Diagrama de Classes — Treinamento Externo
 skinparam classAttributeIconSize 0
 hide empty members
 

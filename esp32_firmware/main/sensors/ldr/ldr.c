@@ -1,5 +1,7 @@
 #include "ldr.h"
 
+static const char *TAG = "LDR";
+
 static const adc_oneshot_chan_cfg_t chan_cfg = {
     .atten    = LDR_ATTEN,        // usei DB_12 pra evitar warning
     .bitwidth = ADC_BITWIDTH_12

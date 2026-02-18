@@ -1,5 +1,5 @@
 @startuml
-title Diagrama de Classes — Esp32 Firmware
+title Diagrama de Arquivos — Esp32 Firmware
 skinparam classAttributeIconSize 0
 hide empty members
 

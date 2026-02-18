@@ -17,6 +17,10 @@
 
 
 void app_main(void) {
+    esp_log_level_set("DECIDER", ESP_LOG_INFO);
+    esp_log_level_set("SOIL", ESP_LOG_INFO);
+    // esp_log_level_set("DHT22", ESP_LOG_INFO);
+    
     // Wifi
     ESP_LOGI("app","init Wi-Fi");
     wifi_init_sta();

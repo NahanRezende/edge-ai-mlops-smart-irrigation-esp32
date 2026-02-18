@@ -25,6 +25,8 @@ int moisture_get_umidade(void) {
 
     int umidade = (SOIL_RAW_SECO - raw) * 100 / (SOIL_RAW_SECO - SOIL_RAW_MOLHADO);
 
+    ESP_LOGI(TAG_SOIL, "umidade=%d", umidade);
+
     if (umidade < 0) umidade = 0;
     if (umidade > 100) umidade = 100;
     return umidade;
